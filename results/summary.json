@@ -1,0 +1,24 @@
+{
+ "sec": {
+  "wrong_password_ditolak": "50/50",
+  "tamper_1bit_terdeteksi_tanpa_ECC": "30/30",
+  "tamper_1bit_dikoreksi_ECC3": "30/30",
+  "rusak_20pct_ECC3_ditolak": "30/30",
+  "rusak_20pct_ECC3_data_salah_diterima": 0,
+  "kdf_ms_per_tebakan": 97.30282999998963,
+  "tebakan_per_detik_1core": 10.277193376596617,
+  "scrypt_N": 32768,
+  "avalanche_kunci_ct_bit_beda": 0.49928768382352934,
+  "avalanche_kunci_std": 0.010651930167282227,
+  "bitflip_plaintext_ct_bit_beda": 0.00048828125,
+  "bitflip_plaintext_tag_bit_beda": 0.5078125,
+  "rs_cover": 0.024479152847170487
+ },
+ "cover_shape": [
+  512,
+  512,
+  3
+ ],
+ "cap": 98256,
+ "rs_cover": 0.024479152847170487
+}
