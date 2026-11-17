@@ -183,6 +183,7 @@ with tabs[1]:
             filename = st.text_input("Nama file hasil ekstraksi", default_name, key=f"filename_{token[0][:12]}")
             st.download_button("Unduh hasil ekstraksi", out, os.path.basename(filename) or "hasil_ekstraksi.bin", "application/octet-stream")
 
+# ------------------------------------------------------------------ STEGANALISIS
 with tabs[2]:
     target = target_selector("analysis", with_cover=True)
     if target is not None:

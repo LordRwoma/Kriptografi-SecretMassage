@@ -75,6 +75,7 @@ python -m unittest discover -s tests -v              # 18 unit test
 python evaluate.py                                   # seluruh eksperimen (± 8 menit) → results/*.csv, figures/*.png
 ```
 Password dibaca dari prompt (`getpass`) atau env `STEGO_PASSWORD` bila `--password` tidak diberikan. Simpan stego sebagai **PNG** (lossless).
+Di GUI, nama file payload dipertahankan sebagai nama unduhan hasil ekstraksi selama stego terakhir masih ada di sesi yang sama; untuk stego yang diunggah, nama hasil dapat diisi manual.
 
 ## Struktur
 | Berkas | Isi |
