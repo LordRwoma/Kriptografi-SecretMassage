@@ -30,6 +30,8 @@ class TestAppWorkflows(unittest.TestCase):
         no_error()
         original = at.session_state["result"]["payload"]
         self.assertEqual(at.session_state["extracted"]["data"], original)
+        self.assertEqual(sum("Berhasil mengekstrak" in w.value for w in at.success), 1)
+        self.assertEqual(sum(w.label.startswith("Pratinjau teks") for w in at.text_area), 1)
         at.run()
         self.assertTrue(any("Autentikasi GCM valid" in w.value for w in at.success))
         button("Jalankan steganalisis").click().run()
@@ -70,3 +72,36 @@ class TestAppWorkflows(unittest.TestCase):
         next(widget for widget in at.button if widget.label == "Jalankan uji serangan").click().run()
         self.assertNotIn("attack_result", at.session_state)
         self.assertTrue(any("Validasi tanpa serangan gagal" in error.value for error in at.error))
+
+    def test_oversize_payload_disables_embed(self):
+        from streamlit.testing.v1 import AppTest
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        at.sidebar.text_input[0].set_value("uji-gui-2026").run()
+        next(widget for widget in at.radio if widget.label == "Sumber payload").set_value("File").run()
+        at.file_uploader(key="payload_upload").set_value(
+            ("oversize.bin", b"x" * 120_000, "application/octet-stream")).run()
+        button = next(widget for widget in at.button if widget.label == "Enkripsi & sisipkan")
+        self.assertTrue(button.disabled)
+        self.assertTrue(any("Payload melebihi kapasitas" in warning.value for warning in at.warning))
+
+    def test_small_jpeg_cover_explains_zero_capacity(self):
+        from streamlit.testing.v1 import AppTest
+        import numpy as np
+        from image_io import encode_image
+
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        next(widget for widget in at.sidebar.selectbox if widget.label == "Format hasil stego").set_value("JPEG").run()
+        next(widget for widget in at.sidebar.radio if widget.label == "Citra sampul").set_value("Unggah sendiri").run()
+        image_bytes = encode_image(np.zeros((64, 64, 3), dtype=np.uint8))
+        at.file_uploader(key="cover_upload").set_value(("small.png", image_bytes, "image/png")).run()
+        self.assertTrue(any("tidak memiliki kapasitas" in warning.value for warning in at.warning))
+
+    def test_source_selectors_have_distinct_labels(self):
+        from streamlit.testing.v1 import AppTest
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        labels = [widget.label for widget in at.radio if widget.label.startswith("Sumber gambar")]
+        self.assertEqual(len(labels), 4)
+        self.assertEqual(len(labels), len(set(labels)))

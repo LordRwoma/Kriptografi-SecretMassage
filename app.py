@@ -24,6 +24,13 @@ SAMPLES = {"astronaut (512 × 512)": skdata.astronaut, "coffee (400 × 600)": sk
            "immunohistochemistry (512 × 512)": skdata.immunohistochemistry}
 MODE_LABEL = {"matrix": "Matrix embedding + LSB matching", "match": "LSB matching ±1", "replace": "LSB replacement"}
 ECC_LABEL = {0: "Tanpa ECC", 1: "ECC 1 — RS(255,223)", 2: "ECC 2 — RS(255,191)", 3: "ECC 3 — RS(255,127)"}
+SOURCE_LABELS = {
+    "extract": "Sumber gambar untuk ekstraksi",
+    "analysis": "Sumber gambar untuk steganalisis",
+    "attack": "Sumber gambar untuk uji serangan",
+    "evaluation": "Sumber gambar untuk evaluasi",
+}
+IMAGE_FORMAT_HELP = "Format yang didukung: PNG, JPG/JPEG, BMP, WebP, TIF/TIFF."
 
 
 def read_upload(upload):
@@ -54,13 +61,9 @@ def fmt(value, digits=4):
     return "∞" if np.isinf(value) else f"{value:.{digits}f}"
 
 
-def csv_download(frame, name, key):
-    st.download_button("Unduh tabel CSV", frame.to_csv(index=False).encode("utf-8-sig"),
-                       name, "text/csv", key=key)
-
-
 def target_selector(key, with_cover=False):
-    source = st.radio("Sumber gambar", ["Hasil penyisipan terakhir", "Unggah gambar"], horizontal=True, key=f"{key}_source")
+    source = st.radio(SOURCE_LABELS[key], ["Hasil penyisipan terakhir", "Unggah gambar"],
+                      horizontal=True, key=f"{key}_source")
     if source == "Hasil penyisipan terakhir":
         result = S.get("result")
         if result is None:
@@ -68,11 +71,14 @@ def target_selector(key, with_cover=False):
             return None
         st.caption(f"Hasil tersimpan: {result['format']} · {result['name']} · {len(result['payload']):,} byte payload")
         return dict(stego=result["stego"], cover=result["cover"], expected=result["payload"], info=result["info"])
-    upload = st.file_uploader("Gambar stego (PNG/JPG/JPEG/BMP/WebP/TIFF)", type=IMAGE_TYPES, key=f"{key}_stego")
+    upload = st.file_uploader("Gambar stego", type=IMAGE_TYPES, key=f"{key}_stego",
+                              help=IMAGE_FORMAT_HELP)
     image = read_upload(upload)
     cover = None
     if with_cover:
-        cover = read_upload(st.file_uploader("Cover asli untuk perbandingan kualitas (opsional)", type=IMAGE_TYPES, key=f"{key}_cover"))
+        cover = read_upload(st.file_uploader(
+            "Cover asli untuk perbandingan kualitas (opsional)", type=IMAGE_TYPES,
+            key=f"{key}_cover", help=IMAGE_FORMAT_HELP))
         if cover is not None and image is not None and cover.shape != image.shape:
             st.error("Dimensi cover dan stego berbeda. Unggah pasangan dengan dimensi yang sama.")
             return None
@@ -83,7 +89,8 @@ st.title("🔐 StegoCrypt-X")
 st.caption("Enkripsi AES-256-GCM dan steganografi citra · PNG: LSB/matrix · JPEG: DCT-QIM + ECC")
 with st.sidebar:
     st.header("Pengaturan penyisipan")
-    password = st.text_input("Password penyisipan", type="password")
+    password = st.text_input("Password penyisipan", type="password",
+                             help="Wajib diisi untuk mengenkripsi payload.")
     output_format = st.selectbox("Format hasil stego", ["PNG", "JPEG"])
     if output_format == "PNG":
         mode = st.radio("Metode penyisipan", list(MODE_LABEL), format_func=MODE_LABEL.get)
@@ -97,9 +104,17 @@ with st.sidebar:
     if src == "Contoh bawaan":
         cover = SAMPLES[st.selectbox("Pilih gambar", list(SAMPLES))]()
     else:
-        cover = read_upload(st.file_uploader("Unggah sampul PNG/JPG/JPEG/BMP/WebP/TIFF", type=IMAGE_TYPES, key="cover_upload"))
+        cover = read_upload(st.file_uploader(
+            "Unggah sampul", type=IMAGE_TYPES, key="cover_upload", help=IMAGE_FORMAT_HELP))
     cap = transport.capacity_bytes(cover.shape, output_format, ecc) if cover is not None else 0
     st.metric("Kapasitas payload tanpa kompresi", f"{cap:,} byte")
+    if cover is not None and cap == 0:
+        recommendation = (
+            "Gunakan sampul lebih besar atau pilih hasil PNG."
+            if output_format == "JPEG" else "Gunakan sampul lebih besar."
+        )
+        st.warning(
+            f"Gambar ini tidak memiliki kapasitas untuk menyimpan payload {output_format}. {recommendation}")
     st.caption("Kapasitas sesuai format hasil dan ECC. Kompresi hanya membantu data yang dapat dipadatkan.")
 
 tabs = st.tabs(["Sisipkan", "Ekstrak", "Steganalisis", "Uji serangan", "Hasil evaluasi"])
@@ -115,9 +130,15 @@ with tabs[0]:
             payload_name = os.path.basename(upload.name)
     st.write(f"Ukuran payload: **{len(payload):,} byte** · Kapasitas: **{cap:,} byte**")
     st.progress(min(len(payload) / max(cap, 1), 1.0))
-    if len(payload) > cap:
-        st.info("Payload melebihi kapasitas tanpa kompresi. Aktifkan kompresi atau gunakan gambar lebih besar/format PNG.")
-    if st.button("Enkripsi & sisipkan", type="primary", disabled=cover is None or not payload or not password):
+    over_capacity = len(payload) > cap
+    if over_capacity and cap > 0:
+        st.warning("Payload melebihi kapasitas. Gunakan kompresi, gambar lebih besar, atau pilih hasil PNG.")
+    if kind == "File" and not payload:
+        st.caption("Pilih file payload yang tidak kosong untuk mengaktifkan penyisipan.")
+    elif kind == "Teks" and not payload:
+        st.caption("Isi pesan untuk mengaktifkan penyisipan.")
+    if st.button("Enkripsi & sisipkan", type="primary",
+                 disabled=cover is None or not payload or not password or over_capacity):
         try:
             with st.spinner("Menyisipkan dan memverifikasi hasil penyimpanan..."):
                 start = time.perf_counter()
@@ -210,7 +231,6 @@ with tabs[2]:
             a, b = st.columns(2)
             a.image(sg, caption="Gambar yang dianalisis", **FIT)
             b.image((sg[..., 1] & 1) * 255, caption="Bidang LSB kanal hijau", **FIT)
-            csv_download(frame.reset_index(names="gambar"), "steganalisis.csv", "analysis_csv")
             st.caption("RS dan chi-kuadrat adalah indikator statistik, bukan bukti ada/tidaknya pesan. Keduanya terutama menilai jejak LSB; JPEG/DCT memerlukan detektor khusus untuk penilaian ketidakterdeteksian.")
             if cv is None:
                 st.info("Unggah cover asli untuk menampilkan PSNR, SSIM, dan MSE.")
@@ -260,7 +280,6 @@ with tabs[3]:
                 a.image(target["stego"], caption="Stego sebelum serangan", **FIT)
                 b.image(record["preview"], caption=record["preview_name"], **FIT)
                 st.download_button("Unduh gambar setelah serangan (PNG)", encode_image(record["preview"]), "hasil_serangan.png", "image/png")
-            csv_download(frame, "uji_serangan.csv", "attack_csv")
             st.caption("PSNR/SSIM/MSE dibandingkan dengan stego sebelum serangan. BER dihitung sebelum koreksi ECC. Penghapusan area bawah mempertahankan dimensi; ini bukan pemotongan ukuran gambar.")
             if target["info"] is None:
                 st.info("BER dan kecocokan dengan payload asli tidak tersedia untuk unggahan tanpa referensi penyisipan. Autentikasi GCM tetap diperiksa dengan password.")
@@ -284,12 +303,12 @@ with tabs[4]:
                           "MSE": fmt(row["MSE"]), "BER": fmt(row["BER"])})
             frame = pd.DataFrame([row])
             st.dataframe(frame, **FIT)
-            csv_download(frame, "evaluasi_gambar.csv", "evaluation_csv")
             if target["cover"] is None:
                 st.info("PSNR, SSIM, dan MSE memerlukan cover asli. Nilai kosong berarti tidak tersedia.")
     st.divider()
     st.subheader("Arsip eksperimen bawaan")
-    st.caption("Data berikut berasal dari eksperimen tersimpan, bukan otomatis dari gambar pilihan di atas. Eksperimen lama memakai LSB; hasilnya tidak mewakili mode DCT/JPEG.")
+    st.caption("Arsip historis: data berikut berasal dari eksperimen tersimpan, bukan gambar yang sedang diuji. "
+               "Eksperimen lama memakai LSB dan tidak mewakili mode DCT/JPEG.")
     result_dir, figures_dir = os.path.join(HERE, "results"), os.path.join(HERE, "figures")
     for filename, title in [("payload_results.csv", "10 ukuran payload"), ("robustness.csv", "Ketahanan terhadap serangan"),
                             ("capacity.csv", "Kapasitas"), ("ml_steganalysis.csv", "Steganalisis ML"),
@@ -300,7 +319,6 @@ with tabs[4]:
                 try:
                     frame = pd.read_csv(path)
                     st.dataframe(frame, **FIT)
-                    csv_download(frame, filename, f"archive_{filename}")
                 except (ValueError, OSError) as exc:
                     st.error(f"Tabel tidak dapat dibaca: {exc}")
     if os.path.isdir(figures_dir):
