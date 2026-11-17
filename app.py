@@ -218,24 +218,35 @@ with tabs[2]:
 with tabs[3]:
     target = target_selector("attack")
     if target is not None:
-        pw = st.text_input("Password untuk menguji pemulihan", type="password", key="attack_password")
+        pw = st.text_input("Password untuk menguji pemulihan", type="password", key="attack_password",
+                           help="Gunakan password yang sama dengan saat menyisipkan payload.")
         names = [name for name, _ in A.SUITE]
         pick = st.selectbox("Serangan", names)
         selected = st.radio("Cakupan pengujian", ["Serangan terpilih", "Seluruh serangan"], horizontal=True)
         token = (image_key(target["stego"]), hashlib.sha256(pw.encode()).hexdigest())
         if st.button("Jalankan uji serangan", disabled=not pw):
             S.pop("attack_result", None)
-            rows, preview, preview_name = [], None, None
-            chosen = names if selected == "Seluruh serangan" else [pick]
-            progress = st.progress(0.0)
-            with st.spinner("Menguji pemulihan pesan pada setiap serangan..."):
-                for i, name in enumerate(chosen):
-                    attacked, row = live.run_attack(target["stego"], name, pw, target["expected"], target["info"])
-                    if name == pick or preview is None:
-                        preview, preview_name = attacked, name
-                    rows.append(row)
-                    progress.progress((i + 1) / len(chosen))
-            S["attack_result"] = dict(token=token, rows=rows, preview=preview, preview_name=preview_name)
+            baseline_image, baseline = live.run_attack(
+                target["stego"], "Tanpa serangan", pw, target["expected"], target["info"])
+            if not baseline["autentikasi_valid"]:
+                st.error("Validasi tanpa serangan gagal. Periksa password dan pastikan gambar sumber "
+                         "memang berisi payload yang disisipkan. Uji serangan dibatalkan.")
+            else:
+                rows, preview, preview_name = [], None, None
+                chosen = names if selected == "Seluruh serangan" else [pick]
+                progress = st.progress(0.0)
+                with st.spinner("Menguji pemulihan pesan pada setiap serangan..."):
+                    for i, name in enumerate(chosen):
+                        if name == "Tanpa serangan":
+                            attacked, row = baseline_image, baseline
+                        else:
+                            attacked, row = live.run_attack(
+                                target["stego"], name, pw, target["expected"], target["info"])
+                        if name == pick or preview is None:
+                            preview, preview_name = attacked, name
+                        rows.append(row)
+                        progress.progress((i + 1) / len(chosen))
+                S["attack_result"] = dict(token=token, rows=rows, preview=preview, preview_name=preview_name)
         record = S.get("attack_result")
         if record and record["token"] == token:
             frame = pd.DataFrame(record["rows"])

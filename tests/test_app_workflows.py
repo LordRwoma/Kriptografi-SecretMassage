@@ -59,3 +59,14 @@ class TestAppWorkflows(unittest.TestCase):
 
     def test_jpeg_workflow(self):
         self.run_workflow("JPEG")
+
+    def test_attack_suite_requires_valid_baseline(self):
+        from streamlit.testing.v1 import AppTest
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        at.sidebar.text_input[0].set_value("uji-gui-2026").run()
+        next(widget for widget in at.button if widget.label == "Enkripsi & sisipkan").click().run()
+        at.text_input(key="attack_password").set_value("password-salah").run()
+        next(widget for widget in at.button if widget.label == "Jalankan uji serangan").click().run()
+        self.assertNotIn("attack_result", at.session_state)
+        self.assertTrue(any("Validasi tanpa serangan gagal" in error.value for error in at.error))
