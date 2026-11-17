@@ -1,5 +1,6 @@
 .venv/
+.test-wheels/
 __pycache__/
-*.py[cod]
-.env
-.streamlit/secrets.toml
+*.pyc
+.pytest_cache/
+demo_stego.png

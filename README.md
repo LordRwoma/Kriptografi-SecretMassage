@@ -1,5 +1,54 @@
 # StegoCrypt-X v2 — Kriptografi + Steganografi
 
+## Pembaruan dukungan format dan evaluasi interaktif
+
+- Sampul dan unggahan analisis/ekstraksi menerima PNG, JPG/JPEG, BMP, WebP,
+  dan TIFF. Format unggahan dibaca sebagai gambar, bukan berdasarkan ekstensi saja.
+- **Hasil PNG:** metode LSB/matrix yang sudah ada, dengan kapasitas besar.
+  Sampul JPG dapat dipakai dan hasilnya disimpan sebagai PNG.
+- **Hasil JPEG:** metode tambahan DCT-QIM pada luminans blok 8×8, empat
+  koefisien per blok, langkah kuantisasi 48, dan ECC 3 wajib (RS 255,127).
+  Kualitas simpan 95 dengan subsampling 4:4:4. Ini JPEG asli, bukan PNG yang
+  diganti ekstensi atau pesan yang ditaruh di metadata gambar.
+- Setiap hasil disimpan, dibaca ulang, dan diekstrak sebelum ditawarkan untuk
+  diunduh. Jika verifikasi tidak berhasil, aplikasi menampilkan kesalahan.
+- Kapasitas JPEG jauh lebih kecil daripada PNG (873 byte pada
+  512×512; angka pasti ditampilkan aplikasi). Gunakan kompresi untuk teks
+  atau sampul lebih besar. Gambar yang sangat jenuh/berkontras ekstrem
+  mungkin tidak berhasil; gunakan PNG jika verifikasi JPEG ditolak.
+- Ekstraksi mendeteksi jalur LSB atau DCT otomatis. PNG lama tetap didukung.
+  Mengubah stego LSB lama menjadi JPG tidak memindahkan pesan ke DCT;
+  buat ulang penyisipan dengan format hasil JPEG.
+- Steganalisis, serangan, dan evaluasi dapat memakai hasil sesi atau gambar
+  unggahan. PSNR/SSIM/MSE memerlukan cover asli; BER memerlukan posisi dan
+  bit referensi dari penyisipan sesi. Nilai yang tidak tersedia dibiarkan kosong.
+- Uji serangan dapat dijalankan satu per satu atau seluruh 16 pengujian;
+  hasil tetap terlihat selama sesi dan tabel dapat diunduh sebagai CSV.
+  Penghapusan area bawah mempertahankan dimensi gambar.
+- Evaluasi gambar pilihan dihitung langsung; tabel/grafik eksperimen lama
+  diberi label arsip dan tetap menggambarkan metode LSB, bukan DCT/JPEG.
+
+JPEG tetap tidak dijamin tahan semua kompresi ulang, filter, resize, atau
+serangan lain. RS/chi-kuadrat spasial bukan detektor yang memadai untuk
+menyimpulkan ketidakterdeteksian metode DCT.
+
+```bash
+python cli.py embed --cover foto.jpg --payload rahasia.txt --out stego.jpg --compress
+python cli.py extract --stego stego.jpg --out hasil.txt
+python cli.py capacity --cover foto.jpg
+```
+
+GUI: pilih **Format hasil stego → JPEG** untuk menghasilkan JPG yang dapat
+diekstrak. Untuk payload besar, pilih PNG. Ketik password pada tab ekstraksi,
+uji serangan, atau evaluasi sebelum menjalankannya.
+
+Modul tambahan: `image_io.py` (baca/simpan), `image_stego.py` (transport
+PNG/JPEG dan verifikasi), `analysis_service.py` (evaluasi gambar pilihan),
+dan `tests/test_image_workflows.py` (regresi format dan hasil evaluasi).
+
+Dokumentasi dan laporan v2 di bawah merupakan rancangan LSB awal; angka
+eksperimennya belum menjadi evaluasi menyeluruh untuk jalur DCT/JPEG baru.
+
 Tugas Akhir **Kriptografi & Keamanan Data**. Kombinasi **tepat 2 metode**: **Kriptografi** (AES-256-GCM, scrypt, HKDF) + **Steganografi** (LSB matching + matrix embedding, posisi acak berkunci) pada media **citra**.
 
 ## Alur sistem

@@ -52,7 +52,7 @@ def rescale(scale):
 
 
 SUITE = [
-    ("Tanpa serangan (PNG lossless)", identity),
+    ("Tanpa serangan", identity),
     ("JPEG Q=95", jpeg(95)),
     ("JPEG Q=75", jpeg(75)),
     ("JPEG Q=50", jpeg(50)),
@@ -64,8 +64,8 @@ SUITE = [
     ("Salt&Pepper 2%", salt_pepper(0.02)),
     ("Median filter 3×3", median3),
     ("Gaussian blur 3×3", gauss_blur),
-    ("Cropping 2% (bawah)", blank_bottom(0.02)),
-    ("Cropping 5% (bawah)", blank_bottom(0.05)),
-    ("Cropping 10% (bawah)", blank_bottom(0.10)),
+    ("Penghapusan area bawah 2%", blank_bottom(0.02)),
+    ("Penghapusan area bawah 5%", blank_bottom(0.05)),
+    ("Penghapusan area bawah 10%", blank_bottom(0.10)),
     ("Resize 50% lalu kembali", rescale(0.5)),
 ]

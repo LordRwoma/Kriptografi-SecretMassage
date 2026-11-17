@@ -13,13 +13,18 @@ import argparse, getpass, hashlib, os, sys, time
 import numpy as np
 from PIL import Image
 import stegocrypt as sc, metrics as M
+import image_stego as transport
+from image_io import load_image
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 G, R, Y, B, X = "\033[92m", "\033[91m", "\033[93m", "\033[96m", "\033[0m"
 if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
     G = R = Y = B = X = ""
 
 
-def load(p): return np.array(Image.open(p).convert("RGB"))
+def load(p): return load_image(p)
 def save(a, p): Image.fromarray(a).save(p, format="PNG")
 def pw(a): return a.password or os.environ.get("STEGO_PASSWORD") or getpass.getpass("Password: ")
 def ok(t): return f"{G}✔ {t}{X}"
@@ -28,20 +33,28 @@ def bad(t): return f"{R}✘ {t}{X}"
 
 def cmd_embed(a):
     cov, data = load(a.cover), open(a.payload, "rb").read()
+    suffix = os.path.splitext(a.out)[1].lower()
+    if suffix not in (".png", ".jpg", ".jpeg"):
+        sys.exit("Gunakan ekstensi keluaran .png, .jpg, atau .jpeg.")
+    output_format = "JPEG" if suffix in (".jpg", ".jpeg") else "PNG"
     t = time.perf_counter()
     try:
-        st, info = sc.embed(cov, data, pw(a), mode=a.mode, ecc=a.ecc, compress=a.compress)
+        st, info, encoded = transport.embed(cov, data, pw(a), output_format=output_format,
+                                            mode=a.mode, ecc=a.ecc, compress=a.compress)
     except ValueError as e:
         sys.exit(bad(str(e)))
-    dt = time.perf_counter() - t; save(st, a.out)
-    print(ok(f"{len(data)} B disisipkan ({100 * len(data) / sc.capacity_bytes(cov.shape, a.ecc):.2f}% kapasitas) dalam {dt * 1000:.0f} ms"))
-    print(f"   mode={a.mode}  k={info['k']}  ECC={a.ecc}  zlib={info['compressed']}  nilai berubah={100 * info['changed'] / cov.size:.3f}%")
+    dt = time.perf_counter() - t
+    with open(a.out, "wb") as output:
+        output.write(encoded)
+    capacity = transport.capacity_bytes(cov.shape, output_format, a.ecc)
+    print(ok(f"{len(data)} B disisipkan ({100 * len(data) / max(capacity, 1):.2f}% kapasitas) dalam {dt * 1000:.0f} ms; hasil simpan terverifikasi"))
+    print(f"   format={output_format}  mode={info['mode']}  k={info['k']}  ECC={info['ecc']}  zlib={info['compressed']}  nilai berubah={100 * info['changed'] / cov.size:.3f}%")
     print(f"   PSNR={M.psnr(cov, st):.2f} dB  SSIM={M.ssim(cov, st):.5f}  MSE={M.mse(cov, st):.4f}  -> {a.out}")
 
 
 def cmd_extract(a):
     try:
-        data = sc.extract(load(a.stego), pw(a))
+        data = transport.extract(load(a.stego), pw(a))
     except sc.ExtractionError as ex:
         sys.exit(bad(f"GAGAL: {ex}"))
     open(a.out, "wb").write(data)
@@ -52,10 +65,13 @@ def cmd_capacity(a):
     im = load(a.cover); h, w = im.shape[:2]
     print(f"{w}x{h} px  ->  default {sc.capacity_bytes(im.shape)} B | ECC1 {sc.capacity_bytes(im.shape, 1)} B | "
           f"ECC2 {sc.capacity_bytes(im.shape, 2)} B | ECC3 {sc.capacity_bytes(im.shape, 3)} B  (data acak/terkompresi)")
+    print(f"JPEG DCT-QIM + ECC3: {transport.capacity_bytes(im.shape, 'JPEG')} B")
 
 
 def cmd_analyze(a):
     c, s = load(a.cover), load(a.stego)
+    if c.shape != s.shape:
+        sys.exit("Dimensi cover dan stego harus sama.")
     print(f"PSNR={M.psnr(c, s):.2f} dB  SSIM={M.ssim(c, s):.5f}  MSE={M.mse(c, s):.4f}  nilai berubah={100 * np.mean(c != s):.3f}%")
     print(f"RS estimasi  cover={M.rs_estimate(c):.4f}  stego={M.rs_estimate(s):.4f}   |   chi² p  cover={M.chi2_pvalue(c):.3g}  stego={M.chi2_pvalue(s):.3g}")
 

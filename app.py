@@ -1,153 +1,299 @@
-"""StegoCrypt-X v2 — demo interaktif.   Jalankan:  streamlit run app.py"""
-import hashlib, io, os, time
+"""StegoCrypt-X: run with streamlit run app.py."""
+import hashlib
+import os
+import time
 import numpy as np
 import pandas as pd
 import streamlit as st
-from PIL import Image
 from skimage import data as skdata
-import stegocrypt as sc, metrics as M, attacks as A
+
+import analysis_service as live
+import attacks as A
+import image_stego as transport
+import metrics as M
+import stegocrypt as sc
+from image_io import IMAGE_TYPES, encode_image, load_image
 
 st.set_page_config(page_title="StegoCrypt-X", page_icon="🔐", layout="wide")
-_v = tuple(int(x) for x in st.__version__.split(".")[:2])
-FIT = {"width": "stretch"} if _v >= (1, 50) else {"use_container_width": True}   # kompatibel lintas versi Streamlit
+_version = tuple(int(x) for x in st.__version__.split(".")[:2])
+FIT = {"width": "stretch"} if _version >= (1, 50) else {"use_container_width": True}
 HERE = os.path.dirname(os.path.abspath(__file__))
-SAMPLES = {"astronaut (512×512 RGB)": skdata.astronaut, "coffee (400×600 RGB)": skdata.coffee, "chelsea (300×451 RGB)": skdata.chelsea,
-           "rocket (427×640 RGB)": skdata.rocket, "immunohistochemistry (512×512)": skdata.immunohistochemistry}
-MODE_LABEL = {"matrix": "Matrix embedding + LSB matching (direkomendasikan)", "match": "LSB matching ±1", "replace": "LSB replacement (naif)"}
-ECC_LABEL = {0: "Tanpa ECC (kapasitas maks)", 1: "ECC 1 — RS(255,223)", 2: "ECC 2 — RS(255,191)", 3: "ECC 3 — RS(255,127) tahan banting"}
+S = st.session_state
+SAMPLES = {"astronaut (512 × 512)": skdata.astronaut, "coffee (400 × 600)": skdata.coffee,
+           "chelsea (300 × 451)": skdata.chelsea, "rocket (427 × 640)": skdata.rocket,
+           "immunohistochemistry (512 × 512)": skdata.immunohistochemistry}
+MODE_LABEL = {"matrix": "Matrix embedding + LSB matching", "match": "LSB matching ±1", "replace": "LSB replacement"}
+ECC_LABEL = {0: "Tanpa ECC", 1: "ECC 1 — RS(255,223)", 2: "ECC 2 — RS(255,191)", 3: "ECC 3 — RS(255,127)"}
 
 
-def to_png(a):
-    b = io.BytesIO(); Image.fromarray(a).save(b, format="PNG"); return b.getvalue()
+def read_upload(upload):
+    if upload is None:
+        return None
+    try:
+        image = load_image(upload)
+        if min(image.shape[:2]) < 8:
+            raise ValueError("Gunakan gambar minimal 8 × 8 piksel.")
+        return image
+    except ValueError as exc:
+        st.error(str(exc))
+        return None
 
 
-def diff_img(c, s, gain=255):
-    return np.clip(np.abs(c.astype(int) - s.astype(int)) * gain, 0, 255).astype(np.uint8)
+def image_key(image):
+    return hashlib.sha256(str(image.shape).encode() + image.tobytes()).hexdigest()
+
+
+def show_metrics(values):
+    for col, (label, val) in zip(st.columns(len(values)), values.items()):
+        col.metric(label, "—" if val is None else val)
+
+
+def fmt(value, digits=4):
+    if value is None:
+        return "—"
+    return "∞" if np.isinf(value) else f"{value:.{digits}f}"
+
+
+def csv_download(frame, name, key):
+    st.download_button("Unduh tabel CSV", frame.to_csv(index=False).encode("utf-8-sig"),
+                       name, "text/csv", key=key)
+
+
+def target_selector(key, with_cover=False):
+    source = st.radio("Sumber gambar", ["Hasil penyisipan terakhir", "Unggah gambar"], horizontal=True, key=f"{key}_source")
+    if source == "Hasil penyisipan terakhir":
+        result = S.get("result")
+        if result is None:
+            st.info("Sisipkan pesan terlebih dahulu atau pilih unggah gambar.")
+            return None
+        st.caption(f"Hasil tersimpan: {result['format']} · {result['name']} · {len(result['payload']):,} byte payload")
+        return dict(stego=result["stego"], cover=result["cover"], expected=result["payload"], info=result["info"])
+    upload = st.file_uploader("Gambar stego (PNG/JPG/JPEG/BMP/WebP/TIFF)", type=IMAGE_TYPES, key=f"{key}_stego")
+    image = read_upload(upload)
+    cover = None
+    if with_cover:
+        cover = read_upload(st.file_uploader("Cover asli untuk perbandingan kualitas (opsional)", type=IMAGE_TYPES, key=f"{key}_cover"))
+        if cover is not None and image is not None and cover.shape != image.shape:
+            st.error("Dimensi cover dan stego berbeda. Unggah pasangan dengan dimensi yang sama.")
+            return None
+    return None if image is None else dict(stego=image, cover=cover, expected=None, info=None)
 
 
 st.title("🔐 StegoCrypt-X")
-st.caption("Kriptografi (AES-256-GCM + scrypt) ⨁ Steganografi (LSB matching + matrix embedding, posisi acak berkunci) — Tugas Akhir Kriptografi & Keamanan Data")
-
+st.caption("Enkripsi AES-256-GCM dan steganografi citra · PNG: LSB/matrix · JPEG: DCT-QIM + ECC")
 with st.sidebar:
-    st.header("⚙️ Pengaturan")
-    password = st.text_input("Password", value="demo-pass-2026", type="password")
-    mode = st.radio("Metode penyisipan", list(MODE_LABEL), format_func=MODE_LABEL.get)
-    ecc = st.selectbox("Ketahanan (Reed-Solomon)", list(ECC_LABEL), format_func=ECC_LABEL.get,
-                       help="ECC>0 membuat pesan tahan noise/cropping ringan, tetapi mengurangi kapasitas. Memaksa k=1.")
-    compress = st.checkbox("Kompres zlib sebelum enkripsi", help="Menaikkan kapasitas efektif untuk teks.")
-    st.divider()
+    st.header("Pengaturan penyisipan")
+    password = st.text_input("Password penyisipan", type="password")
+    output_format = st.selectbox("Format hasil stego", ["PNG", "JPEG"])
+    if output_format == "PNG":
+        mode = st.radio("Metode penyisipan", list(MODE_LABEL), format_func=MODE_LABEL.get)
+        ecc = st.selectbox("Koreksi kesalahan", list(ECC_LABEL), format_func=ECC_LABEL.get)
+        st.caption("Sampul JPG dapat digunakan. Hasil PNG menjaga bit LSB setelah disimpan.")
+    else:
+        mode, ecc = "match", 3
+        st.info("JPEG memakai DCT-QIM + ECC 3, kualitas 95. Kapasitas lebih kecil. Kompresi ulang tetap dapat merusak pesan.")
+    compress = st.checkbox("Kompres payload sebelum enkripsi")
     src = st.radio("Citra sampul", ["Contoh bawaan", "Unggah sendiri"])
     if src == "Contoh bawaan":
-        nm = st.selectbox("Pilih contoh", list(SAMPLES)); cover = SAMPLES[nm]()
+        cover = SAMPLES[st.selectbox("Pilih gambar", list(SAMPLES))]()
     else:
-        up = st.file_uploader("PNG/JPG/BMP", type=["png", "jpg", "jpeg", "bmp"])
-        cover = np.array(Image.open(up).convert("RGB")) if up else skdata.astronaut()
-        if not up: st.info("Belum ada unggahan — memakai contoh astronaut.")
-    cap = sc.capacity_bytes(cover.shape, ecc)
-    st.metric("Kapasitas maks (data acak)", f"{cap:,} B", f"{8 * cap / (cover.shape[0] * cover.shape[1]):.2f} bpp")
+        cover = read_upload(st.file_uploader("Unggah sampul PNG/JPG/JPEG/BMP/WebP/TIFF", type=IMAGE_TYPES, key="cover_upload"))
+    cap = transport.capacity_bytes(cover.shape, output_format, ecc) if cover is not None else 0
+    st.metric("Kapasitas payload tanpa kompresi", f"{cap:,} byte")
+    st.caption("Kapasitas sesuai format hasil dan ECC. Kompresi hanya membantu data yang dapat dipadatkan.")
 
-S = st.session_state
-tabs = st.tabs(["🔐 Sisipkan", "🔓 Ekstrak", "🕵️ Steganalisis", "💥 Uji serangan", "📊 Hasil evaluasi"])
-
-# ------------------------------------------------------------------ SISIPKAN
+tabs = st.tabs(["Sisipkan", "Ekstrak", "Steganalisis", "Uji serangan", "Hasil evaluasi"])
 with tabs[0]:
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        kind = st.radio("Sumber payload", ["Teks", "File"], horizontal=True)
-        if kind == "Teks":
-            txt = st.text_area("Pesan rahasia", "Halo dosen! Ini pesan rahasia untuk Tugas Akhir Kriptografi & Keamanan Data. 🔐", height=130)
-            payload = txt.encode()
-        else:
-            f = st.file_uploader("File payload (apa saja)", key="pl"); payload = f.read() if f else b""
-        st.write(f"Ukuran payload: **{len(payload):,} B** — terpakai **{100 * len(payload) / max(cap, 1):.2f}%** kapasitas")
-        st.progress(min(len(payload) / max(cap, 1), 1.0))
-        go = st.button("🚀 Enkripsi & sisipkan", type="primary", disabled=not payload)
-    if go:
-        try:
-            t = time.perf_counter(); s_img, info = sc.embed(cover, payload, password, mode=mode, ecc=ecc, compress=compress); dt = time.perf_counter() - t
-            S.update(cover=cover, stego=s_img, info=info, payload=payload, dt=dt, pw=password)
-        except ValueError as e:
-            st.error(str(e))
-    if "stego" in S:
-        cv, sg, inf = S.cover, S.stego, S.info
-        m = st.columns(6)
-        m[0].metric("PSNR", f"{M.psnr(cv, sg):.2f} dB"); m[1].metric("SSIM", f"{M.ssim(cv, sg):.5f}"); m[2].metric("MSE", f"{M.mse(cv, sg):.4f}")
-        m[3].metric("k Hamming", inf["k"]); m[4].metric("Nilai berubah", f"{100 * inf['changed'] / cv.size:.3f}%"); m[5].metric("Waktu", f"{S.dt * 1000:.0f} ms")
-        i1, i2, i3 = st.columns(3)
-        i1.image(cv, caption="Cover asli", **FIT); i2.image(sg, caption="Stego-image", **FIT)
-        i3.image(diff_img(cv, sg), caption="|Selisih| ×255 — titik terang = nilai yang diubah", **FIT)
-        st.download_button("⬇️ Unduh stego.png (lossless)", to_png(sg), "stego.png", "image/png")
-        with st.expander("🔬 Detail teknis"):
-            st.json(dict(salt=inf["salt"].hex(), nonce=inf["nonce"].hex(), header_hex=inf["header"].hex(), blob_bytes=inf["blob_len"],
-                         ciphertext_entropy=round(M.entropy_bytes(inf["ciphertext"]), 4), bit_tersisip=inf["n_bits"],
-                         efisiensi_bit_per_perubahan=round(inf["efficiency"], 2), ecc=inf["ecc"], zlib=inf["compressed"]))
-
-# ------------------------------------------------------------------ EKSTRAK
-with tabs[1]:
-    sel = st.radio("Sumber stego", ["Stego terakhir (tab Sisipkan)", "Unggah stego.png"], horizontal=True)
-    pw2 = st.text_input("Password ekstraksi", value=password, type="password", key="pw2")
-    target = None
-    if sel.startswith("Stego terakhir"):
-        target = S.get("stego")
-        if target is None: st.info("Belum ada stego — buat dulu di tab Sisipkan.")
+    kind = st.radio("Sumber payload", ["Teks", "File"], horizontal=True)
+    payload_name = "pesan.txt"
+    if kind == "Teks":
+        payload = st.text_area("Pesan rahasia", "Halo! Ini pesan rahasia StegoCrypt-X.", height=120).encode("utf-8")
     else:
-        u = st.file_uploader("stego.png", type=["png"], key="up_st")
-        if u: target = np.array(Image.open(u).convert("RGB"))
-    if target is not None and st.button("🔓 Ekstrak & dekripsi"):
+        upload = st.file_uploader("File payload (teks, dokumen, gambar, atau file lain)", key="payload_upload")
+        payload = upload.getvalue() if upload else b""
+        if upload:
+            payload_name = os.path.basename(upload.name)
+    st.write(f"Ukuran payload: **{len(payload):,} byte** · Kapasitas: **{cap:,} byte**")
+    st.progress(min(len(payload) / max(cap, 1), 1.0))
+    if len(payload) > cap:
+        st.info("Payload melebihi kapasitas tanpa kompresi. Aktifkan kompresi atau gunakan gambar lebih besar/format PNG.")
+    if st.button("Enkripsi & sisipkan", type="primary", disabled=cover is None or not payload or not password):
         try:
-            out = sc.extract(target, pw2)
-            st.success(f"Berhasil: {len(out):,} B diekstrak, tag GCM valid ✔")
-            st.code(f"SHA-256: {hashlib.sha256(out).hexdigest()}")
-            if "payload" in S and sel.startswith("Stego terakhir"):
-                st.write("Identik dengan payload asli:", "✅ ya" if out == S.payload else "❌ tidak")
-            try: st.text_area("Isi (teks)", out.decode(), height=120)
-            except UnicodeDecodeError: st.info("Payload biner — gunakan tombol unduh.")
-            st.download_button("⬇️ Unduh hasil ekstraksi", out, "hasil_ekstraksi.bin")
-        except sc.ExtractionError as e:
-            st.error(f"DITOLAK: {e}")
-
-# ------------------------------------------------------------------ STEGANALISIS
-with tabs[2]:
-    if "stego" not in S: st.info("Buat stego dulu di tab Sisipkan.")
-    else:
-        cv, sg = S.cover, S.stego; g = 1 if cv.ndim == 3 else None
+            with st.spinner("Menyisipkan dan memverifikasi hasil penyimpanan..."):
+                start = time.perf_counter()
+                saved, info, encoded = transport.embed(cover, payload, password, output_format, mode, ecc, compress)
+                elapsed = (time.perf_counter() - start) * 1000
+            S["result"] = dict(cover=cover.copy(), stego=saved, info=info, encoded=encoded,
+                               payload=payload, name=payload_name, format=info["output_format"], elapsed=elapsed)
+            for key in ("extracted", "attack_result", "live_evaluation"):
+                S.pop(key, None)
+            st.success("Pesan berhasil disisipkan. Ekstraksi dari berkas hasil simpan sudah diverifikasi identik.")
+        except (ValueError, sc.ExtractionError) as exc:
+            st.error(str(exc))
+    if "result" in S:
+        result = S.result
+        cv, sg, info = result["cover"], result["stego"], result["info"]
+        q = live.quality(cv, sg)
+        st.subheader("Hasil penyisipan terakhir")
+        st.caption(f"Format {result['format']} · {info['mode']} · ECC {info['ecc']} · payload {result['name']}")
+        show_metrics({"PSNR (dB)": fmt(q["PSNR_dB"], 2), "SSIM": fmt(q["SSIM"], 5),
+                      "MSE": fmt(q["MSE"]), "Waktu + verifikasi": f"{result['elapsed']:.0f} ms"})
         a, b, c = st.columns(3)
-        a.metric("RS estimasi (cover → stego)", f"{M.rs_estimate(sg):.4f}", f"cover {M.rs_estimate(cv):.4f}", delta_color="off")
-        b.metric("χ² p-value (≈1 = terdeteksi)", f"{M.chi2_pvalue(sg):.3g}", f"cover {M.chi2_pvalue(cv):.3g}", delta_color="off")
-        c.metric("Korelasi horizontal", f"{M.adjacent_corr(sg):.5f}", f"cover {M.adjacent_corr(cv):.5f}", delta_color="off")
-        lo, hi = 90, 130; hc, hs = np.bincount(cv.ravel(), minlength=256)[lo:hi], np.bincount(sg.ravel(), minlength=256)[lo:hi]
-        st.write("**Histogram nilai piksel (90–130):** cover vs stego"); st.bar_chart(pd.DataFrame({"cover": hc, "stego": hs}, index=np.arange(lo, hi)))
-        p1, p2 = st.columns(2)
-        ch = (lambda x: x[..., 1]) if g else (lambda x: x)
-        p1.image((ch(cv) & 1) * 255, caption="Bidang LSB cover", **FIT); p2.image((ch(sg) & 1) * 255, caption="Bidang LSB stego (acak, tanpa pola)", **FIT)
-        st.caption("Cara baca: LSB replacement → pasangan nilai (2k, 2k+1) terekualisasi (histogram 'tangga', χ²→1). LSB matching & matrix embedding tidak meninggalkan jejak itu.")
+        a.image(cv, caption="Cover asli", **FIT)
+        b.image(sg, caption="Stego dari berkas hasil simpan", **FIT)
+        diff = np.clip(np.abs(cv.astype(int) - sg.astype(int)) * 20, 0, 255).astype(np.uint8)
+        c.image(diff, caption="Selisih diperbesar ×20", **FIT)
+        ext, mime = ("jpg", "image/jpeg") if result["format"] == "JPEG" else ("png", "image/png")
+        st.download_button(f"Unduh stego.{ext}", result["encoded"], f"stego.{ext}", mime)
+        with st.expander("Detail teknis"):
+            st.json(dict(metode=info["mode"], backend=info["backend"], ecc=info["ecc"],
+                         kompresi=info["compressed"], k_Hamming=info["k"], blob_byte=info["blob_len"],
+                         nilai_kanal_berubah=info["changed"], entropi_ciphertext=M.entropy_bytes(info["ciphertext"]),
+                         verifikasi_berkas=info["verified"]))
 
-# ------------------------------------------------------------------ SERANGAN
+with tabs[1]:
+    target = target_selector("extract")
+    pw = st.text_input("Password ekstraksi", type="password", key="extract_password")
+    if target is not None:
+        token = (image_key(target["stego"]), hashlib.sha256(pw.encode()).hexdigest())
+        if st.button("Ekstrak & dekripsi", type="primary", disabled=not pw):
+            S.pop("extracted", None)
+            try:
+                with st.spinner("Membaca dan mendekripsi pesan..."):
+                    out = transport.extract(target["stego"], pw)
+                S["extracted"] = dict(token=token, data=out,
+                                      identical=out == target["expected"] if target["expected"] is not None else None)
+            except sc.ExtractionError as exc:
+                st.error(str(exc))
+        record = S.get("extracted")
+        if record and record["token"] == token:
+            out = record["data"]
+            st.success(f"Berhasil mengekstrak {len(out):,} byte. Autentikasi GCM valid.")
+            if record["identical"] is not None:
+                st.write("Identik dengan payload asli:", "Ya" if record["identical"] else "Tidak")
+            st.code(f"SHA-256: {hashlib.sha256(out).hexdigest()}")
+            try:
+                preview = out.decode("utf-8")
+                st.text_area("Pratinjau teks (maksimal 4.000 karakter)", preview[:4000], height=150)
+                if len(preview) > 4000:
+                    st.caption("Pratinjau diringkas; unduhan berisi seluruh payload.")
+            except UnicodeDecodeError:
+                st.info("Payload biner. Unduh hasil untuk membuka file aslinya.")
+            default_name = S.result["name"] if target["expected"] is not None else "hasil_ekstraksi.bin"
+            filename = st.text_input("Nama file hasil ekstraksi", default_name, key=f"filename_{token[0][:12]}")
+            st.download_button("Unduh hasil ekstraksi", out, os.path.basename(filename) or "hasil_ekstraksi.bin", "application/octet-stream")
+
+with tabs[2]:
+    target = target_selector("analysis", with_cover=True)
+    if target is not None:
+        sg, cv = target["stego"], target["cover"]
+        token = (image_key(sg), image_key(cv) if cv is not None else None)
+        if st.button("Jalankan steganalisis"):
+            with st.spinner("Menghitung metrik gambar..."):
+                S["analysis_result"] = dict(token=token, stego=live.steganalysis(sg),
+                                             cover=live.steganalysis(cv) if cv is not None else None,
+                                             quality=live.quality(cv, sg))
+        record = S.get("analysis_result")
+        if record and record["token"] == token:
+            frame = pd.DataFrame([record["stego"]], index=["Stego"])
+            if record["cover"] is not None:
+                frame.loc["Cover"] = record["cover"]
+            st.dataframe(frame, **FIT)
+            q = record["quality"]
+            show_metrics({"PSNR (dB)": fmt(q["PSNR_dB"], 2), "SSIM": fmt(q["SSIM"], 5), "MSE": fmt(q["MSE"])})
+            hist = {"Stego": np.bincount(sg.ravel(), minlength=256)}
+            if cv is not None:
+                hist["Cover"] = np.bincount(cv.ravel(), minlength=256)
+            st.write("Histogram nilai kanal (0–255)")
+            st.line_chart(pd.DataFrame(hist))
+            a, b = st.columns(2)
+            a.image(sg, caption="Gambar yang dianalisis", **FIT)
+            b.image((sg[..., 1] & 1) * 255, caption="Bidang LSB kanal hijau", **FIT)
+            csv_download(frame.reset_index(names="gambar"), "steganalisis.csv", "analysis_csv")
+            st.caption("RS dan chi-kuadrat adalah indikator statistik, bukan bukti ada/tidaknya pesan. Keduanya terutama menilai jejak LSB; JPEG/DCT memerlukan detektor khusus untuk penilaian ketidakterdeteksian.")
+            if cv is None:
+                st.info("Unggah cover asli untuk menampilkan PSNR, SSIM, dan MSE.")
+
 with tabs[3]:
-    if "stego" not in S: st.info("Buat stego dulu di tab Sisipkan.")
-    else:
-        names = [n for n, _ in A.SUITE]; pick = st.selectbox("Serangan", names, index=7)
-        att = dict(A.SUITE)[pick](S.stego)
-        k1, k2 = st.columns(2); k1.image(att, caption=f"Setelah: {pick}", **FIT)
-        try:
-            out = sc.extract(att, S.pw); okx = out == S.payload
-        except sc.ExtractionError as e:
-            okx, err = False, str(e)
-        with k2:
-            st.metric("PSNR vs stego", f"{M.psnr(S.stego, att):.2f} dB" if pick != names[0] else "∞")
-            st.metric("BER bit tersisip", f"{M.ber(S.info['body_bits'], sc.read_body_bits(att, S.info)):.4f}")
-            st.success("Payload pulih utuh ✔") if okx else st.error(f"Ekstraksi gagal: {err}")
-        st.caption("LSB secara inheren rapuh (JPEG/noise/filter mengacak LSB). Mode ECC 2–3 menambah ketahanan terhadap noise impuls & cropping ringan.")
+    target = target_selector("attack")
+    if target is not None:
+        pw = st.text_input("Password untuk menguji pemulihan", type="password", key="attack_password")
+        names = [name for name, _ in A.SUITE]
+        pick = st.selectbox("Serangan", names)
+        selected = st.radio("Cakupan pengujian", ["Serangan terpilih", "Seluruh serangan"], horizontal=True)
+        token = (image_key(target["stego"]), hashlib.sha256(pw.encode()).hexdigest())
+        if st.button("Jalankan uji serangan", disabled=not pw):
+            S.pop("attack_result", None)
+            rows, preview, preview_name = [], None, None
+            chosen = names if selected == "Seluruh serangan" else [pick]
+            progress = st.progress(0.0)
+            with st.spinner("Menguji pemulihan pesan pada setiap serangan..."):
+                for i, name in enumerate(chosen):
+                    attacked, row = live.run_attack(target["stego"], name, pw, target["expected"], target["info"])
+                    if name == pick or preview is None:
+                        preview, preview_name = attacked, name
+                    rows.append(row)
+                    progress.progress((i + 1) / len(chosen))
+            S["attack_result"] = dict(token=token, rows=rows, preview=preview, preview_name=preview_name)
+        record = S.get("attack_result")
+        if record and record["token"] == token:
+            frame = pd.DataFrame(record["rows"])
+            show_metrics({"Jumlah uji": len(frame), "Autentikasi valid": int(frame.autentikasi_valid.sum()),
+                          "Gagal dipulihkan": int((~frame.autentikasi_valid).sum())})
+            st.dataframe(frame, **FIT)
+            if target["info"] is not None:
+                st.bar_chart(frame.set_index("serangan")[["BER"]])
+            if record["preview"] is not None:
+                a, b = st.columns(2)
+                a.image(target["stego"], caption="Stego sebelum serangan", **FIT)
+                b.image(record["preview"], caption=record["preview_name"], **FIT)
+                st.download_button("Unduh gambar setelah serangan (PNG)", encode_image(record["preview"]), "hasil_serangan.png", "image/png")
+            csv_download(frame, "uji_serangan.csv", "attack_csv")
+            st.caption("PSNR/SSIM/MSE dibandingkan dengan stego sebelum serangan. BER dihitung sebelum koreksi ECC. Penghapusan area bawah mempertahankan dimensi; ini bukan pemotongan ukuran gambar.")
+            if target["info"] is None:
+                st.info("BER dan kecocokan dengan payload asli tidak tersedia untuk unggahan tanpa referensi penyisipan. Autentikasi GCM tetap diperiksa dengan password.")
 
-# ------------------------------------------------------------------ HASIL EVALUASI
 with tabs[4]:
-    R, F = os.path.join(HERE, "results"), os.path.join(HERE, "figures")
-    if not os.path.isdir(R) or not os.listdir(R): st.warning("Jalankan `python evaluate.py` untuk menghasilkan hasil evaluasi.")
-    else:
-        for csv, title in [("payload_results.csv", "Tabel 10 payload (cover astronaut)"), ("robustness.csv", "Robustness"), ("capacity.csv", "Kapasitas"),
-                           ("ml_steganalysis.csv", "Steganalisis ML (AUC)"), ("bruteforce.csv", "Estimasi brute force password")]:
-            p = os.path.join(R, csv)
-            if os.path.exists(p):
-                with st.expander(f"📄 {title}", expanded=(csv == "payload_results.csv")): st.dataframe(pd.read_csv(p), **FIT)
-        for img in sorted(os.listdir(F)) if os.path.isdir(F) else []:
-            if img.endswith(".png"): st.image(os.path.join(F, img), caption=img, **FIT)
+    st.subheader("Evaluasi gambar pilihan")
+    target = target_selector("evaluation", with_cover=True)
+    if target is not None:
+        pw = st.text_input("Password untuk evaluasi ekstraksi", type="password", key="evaluation_password")
+        token = (image_key(target["stego"]), image_key(target["cover"]) if target["cover"] is not None else None,
+                 hashlib.sha256(pw.encode()).hexdigest())
+        if st.button("Evaluasi gambar ini", disabled=not pw):
+            with st.spinner("Mengevaluasi kualitas, steganalisis, dan ekstraksi..."):
+                row = live.evaluate(target["cover"], target["stego"], pw, target["expected"], target["info"])
+            S["live_evaluation"] = dict(token=token, row=row)
+        record = S.get("live_evaluation")
+        if record and record["token"] == token:
+            row = record["row"]
+            (st.success if row["autentikasi_valid"] else st.error)(row["keterangan"])
+            show_metrics({"PSNR (dB)": fmt(row["PSNR_dB"], 2), "SSIM": fmt(row["SSIM"], 5),
+                          "MSE": fmt(row["MSE"]), "BER": fmt(row["BER"])})
+            frame = pd.DataFrame([row])
+            st.dataframe(frame, **FIT)
+            csv_download(frame, "evaluasi_gambar.csv", "evaluation_csv")
+            if target["cover"] is None:
+                st.info("PSNR, SSIM, dan MSE memerlukan cover asli. Nilai kosong berarti tidak tersedia.")
+    st.divider()
+    st.subheader("Arsip eksperimen bawaan")
+    st.caption("Data berikut berasal dari eksperimen tersimpan, bukan otomatis dari gambar pilihan di atas. Eksperimen lama memakai LSB; hasilnya tidak mewakili mode DCT/JPEG.")
+    result_dir, figures_dir = os.path.join(HERE, "results"), os.path.join(HERE, "figures")
+    for filename, title in [("payload_results.csv", "10 ukuran payload"), ("robustness.csv", "Ketahanan terhadap serangan"),
+                            ("capacity.csv", "Kapasitas"), ("ml_steganalysis.csv", "Steganalisis ML"),
+                            ("bruteforce.csv", "Estimasi brute force")]:
+        path = os.path.join(result_dir, filename)
+        if os.path.exists(path):
+            with st.expander(title):
+                try:
+                    frame = pd.read_csv(path)
+                    st.dataframe(frame, **FIT)
+                    csv_download(frame, filename, f"archive_{filename}")
+                except (ValueError, OSError) as exc:
+                    st.error(f"Tabel tidak dapat dibaca: {exc}")
+    if os.path.isdir(figures_dir):
+        with st.expander("Grafik eksperimen bawaan"):
+            figures = [name for name in sorted(os.listdir(figures_dir)) if name.endswith(".png")]
+            if figures:
+                filename = st.selectbox("Pilih grafik", figures)
+                st.image(os.path.join(figures_dir, filename), caption=filename, **FIT)
