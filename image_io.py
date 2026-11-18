@@ -11,7 +11,7 @@ IMAGE_TYPES = [
     "ppm", "pgm", "pbm", "pnm", "qoi", "jp2", "j2k", "jpx", "avif",
 ]
 VECTOR_IMAGE_TYPES = ["svg"]
-MAX_SVG_BYTES = 2 * 1024 * 1024
+MAX_SVG_BYTES = 20 * 1024 * 1024
 
 
 def _read_bytes(source):
@@ -74,7 +74,7 @@ def _svg_dimensions(root, max_edge):
 
 def _rasterize_svg(data, max_edge):
     if len(data) > MAX_SVG_BYTES:
-        raise ValueError("Ukuran SVG terlalu besar (maksimal 2 MiB).")
+        raise ValueError("Ukuran SVG terlalu besar (maksimal 20 MiB).")
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:

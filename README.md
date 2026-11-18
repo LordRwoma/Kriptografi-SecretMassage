@@ -5,7 +5,7 @@
 - Sampul raster dan unggahan analisis/ekstraksi menerima PNG, JPG/JPEG, BMP,
   WebP, TIFF, GIF, ICO, PPM/PGM, JPEG 2000, QOI, dan AVIF bila decoder Pillow
   tersedia. Gambar vektor SVG dapat dipakai sebagai sampul dan dirasterisasi
-  sebelum penyisipan; sumber dibatasi 2 MiB dan maksimal 512–2048 piksel pada
+  sebelum penyisipan; SVG dibatasi 20 MiB dan maksimal 512–2048 piksel pada
   sisi terpanjang. Hasil stego tetap raster PNG/JPEG, bukan berkas vektor.
 - **Hasil PNG:** metode LSB/matrix yang sudah ada, dengan kapasitas besar.
   Sampul JPG dapat dipakai dan hasilnya disimpan sebagai PNG.
