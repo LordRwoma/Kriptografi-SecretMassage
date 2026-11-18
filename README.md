@@ -2,6 +2,17 @@
 
 ## Pembaruan dukungan format dan evaluasi interaktif
 
+- **Uji serangan** kini memiliki kelompok/tingkat gangguan: filtering, resizing
+  beberapa interpolasi, cropping dimensi, rotasi, pergeseran, dan serangan
+  gabungan. Metrik yang tidak sesuai setelah perubahan dimensi dikosongkan;
+  percobaan ekstraksi tetap dicatat. Pilih pratinjau dan unduh CSV hasil uji.
+- Halaman **Complexity & Efisiensi** mengukur waktu dan memori RSS di proses
+  terpisah, pada 10 ukuran payload dan pilihan resolusi. Tersedia ringkasan,
+  grafik, data mentah dan metadata perangkat dalam ZIP. Jalankan instalasi
+  requirements untuk dependensi `psutil` yang baru.
+- Panduan langkah, definisi metrik, dan batas interpretasi benchmark tersedia
+  di [docs/robustness_efisiensi.md](docs/robustness_efisiensi.md).
+
 - Sampul raster dan unggahan analisis/ekstraksi menerima PNG, JPG/JPEG, BMP,
   WebP, TIFF, GIF, ICO, PPM/PGM, JPEG 2000, QOI, dan AVIF bila decoder Pillow
   tersedia. Gambar vektor SVG dapat dipakai sebagai sampul dan dirasterisasi
@@ -27,7 +38,7 @@
 - Steganalisis, serangan, dan evaluasi dapat memakai hasil sesi atau gambar
   unggahan. PSNR/SSIM/MSE memerlukan cover asli; BER memerlukan posisi dan
   bit referensi dari penyisipan sesi. Nilai yang tidak tersedia dibiarkan kosong.
-- Uji serangan dapat dijalankan satu per satu atau seluruh 16 pengujian;
+- Uji serangan dapat dijalankan satu per satu atau seluruh pengujian terpilih;
   hasil tetap terlihat selama sesi dan tabel dapat diunduh sebagai CSV.
   Penghapusan area bawah mempertahankan dimensi gambar.
 - Evaluasi gambar pilihan dihitung langsung; tabel/grafik eksperimen lama
@@ -91,7 +102,8 @@ Di GUI, nama file payload dipertahankan sebagai nama unduhan hasil ekstraksi sel
 |---|---|
 | `stegocrypt.py` | inti: kripto, ECC, matrix embedding, embed/extract |
 | `metrics.py` | PSNR/SSIM/MSE/BER, entropi, uji keacakan (monobit/runs/χ²), RS, χ² Westfeld, fitur SPAM + detektor ML |
-| `attacks.py` | 16 serangan robustness (JPEG, noise, S&P, filter, cropping, resize) |
+| `attacks.py` | Suite arsip 16 serangan dan suite GUI yang diperluas, beserta parameter gangguan |
+| `benchmark_service.py`, `benchmark_worker.py` | Benchmark waktu/RSS terisolasi dan ekspor hasil |
 | `steganalysis.py` | eksperimen ablasi 4 skema + detektor ML *leave-one-cover-out* |
 | `evaluate.py` | seluruh eksperimen → `results/`, `figures/` |
 | `cli.py`, `app.py` | demo terminal & GUI Streamlit |
@@ -100,5 +112,9 @@ Di GUI, nama file payload dipertahankan sebagai nama unduhan hasil ekstraksi sel
 
 ## Batasan yang diakui
 LSB bersifat rapuh terhadap kompresi lossy/filter (lihat Bab Robustness); ECC hanya menolong noise impuls & cropping ringan. Cropping nyata
-(dimensi berubah) tidak didukung karena pemetaan posisi bergantung ukuran citra. Memori yang diukur adalah alokasi Python/NumPy (`tracemalloc`);
-scrypt (32 MiB) dialokasikan di sisi C sehingga tidak terhitung.
+(dimensi berubah) umumnya merusak pemetaan posisi; GUI tetap mengujinya dan
+mencatat hasil gagal tanpa menghitung BER/kualitas pada dimensi berbeda.
+Memori arsip `evaluate.py` adalah alokasi Python/NumPy (`tracemalloc`), sehingga
+alokasi scrypt native tidak terhitung di sana. Halaman benchmark baru memakai
+RSS/working set proses termasuk alokasi native, dengan batas sampling yang
+dijelaskan pada panduan.
