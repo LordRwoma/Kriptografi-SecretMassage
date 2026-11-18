@@ -2,7 +2,7 @@
 import io
 import os
 import unittest
-from PIL import Image
+from PIL import Image, PngImagePlugin
 import numpy as np
 from skimage import data
 
@@ -115,6 +115,16 @@ class TestImageWorkflows(unittest.TestCase):
             load_image(io.BytesIO(b"not an image"))
         with self.assertRaises(ValueError):
             transport.embed(np.zeros((16, 16, 3), np.uint8), b"x", PASSWORD, "JPEG")
+
+    def test_png_metadata_containing_svg_marker_stays_a_raster_image(self):
+        image = Image.new("RGB", (32, 24), "white")
+        metadata = PngImagePlugin.PngInfo()
+        metadata.add_text("Description", "<svg marker in PNG metadata")
+        upload = io.BytesIO()
+        image.save(upload, format="PNG", pnginfo=metadata)
+
+        decoded = load_image(io.BytesIO(upload.getvalue()))
+        self.assertEqual(decoded.shape, (24, 32, 3))
 
     def test_svg_cover_rasterizes_to_bounded_png_pixels(self):
         svg = (

@@ -45,8 +45,32 @@ def _is_svg(source):
         source.seek(0)
     else:
         return False
-    normalized = head.lstrip(b"\xef\xbb\xbf \t\r\n").lower()
-    return b"<svg" in normalized
+
+    if head.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        text = head.decode("utf-32", errors="ignore")
+    elif head.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        text = head.decode("utf-16", errors="ignore")
+    elif head.startswith(b"\x00\x00\x00<"):
+        text = head.decode("utf-32-be", errors="ignore")
+    elif head.startswith(b"<\x00\x00\x00"):
+        text = head.decode("utf-32-le", errors="ignore")
+    elif head.startswith(b"\x00<"):
+        text = head.decode("utf-16-be", errors="ignore")
+    elif head.startswith(b"<\x00"):
+        text = head.decode("utf-16-le", errors="ignore")
+    else:
+        text = head.decode("ascii", errors="ignore")
+
+    normalized = text.lstrip("\ufeff \t\r\n")
+    while normalized.startswith(("<!--", "<?")):
+        closing = "-->" if normalized.startswith("<!--") else "?>"
+        end = normalized.find(closing)
+        if end < 0:
+            return False
+        normalized = normalized[end + len(closing):].lstrip(" \t\r\n")
+    if re.match(r"<!DOCTYPE\s+(?:[\w.-]+:)?svg\b", normalized, flags=re.IGNORECASE):
+        return True
+    return bool(re.match(r"<(?:[\w.-]+:)?svg(?=[\s/>])", normalized, flags=re.IGNORECASE))
 
 
 def _svg_dimensions(root, max_edge):
