@@ -1,4 +1,5 @@
 """Image decoding shared by the GUI and CLI (never rotate stego pixels)."""
+import codecs
 import io
 import os
 import re
@@ -72,13 +73,55 @@ def _svg_dimensions(root, max_edge):
     return out_width, out_height
 
 
+def _decode_svg(data):
+    if data.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        encoding = "utf-32"
+    elif data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        encoding = "utf-16"
+    elif data.startswith(codecs.BOM_UTF8):
+        encoding = "utf-8-sig"
+    elif data.startswith(b"\x00\x00\x00<"):
+        encoding = "utf-32-be"
+    elif data.startswith(b"<\x00\x00\x00"):
+        encoding = "utf-32-le"
+    elif data.startswith(b"\x00<\x00?"):
+        encoding = "utf-16-be"
+    elif data.startswith(b"<\x00?\x00"):
+        encoding = "utf-16-le"
+    else:
+        encoding = "utf-8-sig"
+        declaration = re.match(
+            rb"\s*<\?xml\b[^?]*\bencoding\s*=\s*(['\"])([^'\"]+)\1",
+            data[:512],
+            flags=re.IGNORECASE,
+        )
+        if declaration:
+            try:
+                encoding = declaration.group(2).decode("ascii")
+            except UnicodeDecodeError as exc:
+                raise ValueError("Deklarasi encoding SVG tidak valid.") from exc
+
+    try:
+        text = data.decode(encoding)
+    except (LookupError, UnicodeDecodeError) as exc:
+        raise ValueError(
+            "Encoding SVG tidak cocok dengan isinya. Periksa deklarasi encoding "
+            "XML atau simpan sebagai UTF-8."
+        ) from exc
+
+    return re.sub(
+        r"""(<\?xml\b[^?]*\bencoding\s*=\s*['"])[^'"]+(['"])""",
+        r"\1UTF-8\2",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+
 def _rasterize_svg(data, max_edge):
     if len(data) > MAX_SVG_BYTES:
         raise ValueError("Ukuran SVG terlalu besar (maksimal 20 MiB).")
-    try:
-        text = data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise ValueError("SVG harus menggunakan encoding UTF-8.") from exc
+    text = _decode_svg(data)
     if re.search(r"<!\s*(DOCTYPE|ENTITY)\b", text, flags=re.IGNORECASE):
         raise ValueError("SVG dengan deklarasi DTD/entity tidak didukung.")
     if re.search(r"(?:href\s*=\s*['\"]\s*(?:https?:|file:|//)|url\(\s*['\"]?\s*(?:https?:|file:|//))",

@@ -6,7 +6,8 @@
   WebP, TIFF, GIF, ICO, PPM/PGM, JPEG 2000, QOI, dan AVIF bila decoder Pillow
   tersedia. Gambar vektor SVG dapat dipakai sebagai sampul dan dirasterisasi
   sebelum penyisipan; SVG dibatasi 20 MiB dan maksimal 512–2048 piksel pada
-  sisi terpanjang. Hasil stego tetap raster PNG/JPEG, bukan berkas vektor.
+  sisi terpanjang. Encoding SVG mengikuti deklarasi XML-nya. Hasil stego tetap
+  raster PNG/JPEG, bukan berkas vektor.
 - **Hasil PNG:** metode LSB/matrix yang sudah ada, dengan kapasitas besar.
   Sampul JPG dapat dipakai dan hasilnya disimpan sebagai PNG.
 - **Hasil JPEG:** metode tambahan DCT-QIM pada luminans blok 8×8, empat
