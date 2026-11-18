@@ -2,14 +2,18 @@
 
 ## Pembaruan dukungan format dan evaluasi interaktif
 
-- Sampul dan unggahan analisis/ekstraksi menerima PNG, JPG/JPEG, BMP, WebP,
-  dan TIFF. Format unggahan dibaca sebagai gambar, bukan berdasarkan ekstensi saja.
+- Sampul raster dan unggahan analisis/ekstraksi menerima PNG, JPG/JPEG, BMP,
+  WebP, TIFF, GIF, ICO, PPM/PGM, JPEG 2000, QOI, dan AVIF bila decoder Pillow
+  tersedia. Gambar vektor SVG dapat dipakai sebagai sampul dan dirasterisasi
+  sebelum penyisipan; sumber dibatasi 2 MiB dan maksimal 512–2048 piksel pada
+  sisi terpanjang. Hasil stego tetap raster PNG/JPEG, bukan berkas vektor.
 - **Hasil PNG:** metode LSB/matrix yang sudah ada, dengan kapasitas besar.
   Sampul JPG dapat dipakai dan hasilnya disimpan sebagai PNG.
 - **Hasil JPEG:** metode tambahan DCT-QIM pada luminans blok 8×8, empat
-  koefisien per blok, langkah kuantisasi 48, dan ECC 3 wajib (RS 255,127).
+  koefisien per blok, langkah kuantisasi 16, dan ECC 3 wajib (RS 255,127).
   Kualitas simpan 95 dengan subsampling 4:4:4. Ini JPEG asli, bukan PNG yang
-  diganti ekstensi atau pesan yang ditaruh di metadata gambar.
+  diganti ekstensi atau pesan yang ditaruh di metadata gambar. QIM lebih kecil
+  mengurangi perubahan visual; kompresi ulang dan serangan tetap dapat merusak pesan.
 - Setiap hasil disimpan, dibaca ulang, dan diekstrak sebelum ditawarkan untuk
   diunduh. Jika verifikasi tidak berhasil, aplikasi menampilkan kesalahan.
 - Kapasitas JPEG jauh lebih kecil daripada PNG (873 byte pada
@@ -39,11 +43,13 @@ python cli.py capacity --cover foto.jpg
 ```
 
 GUI: pilih **Format hasil stego → JPEG** untuk menghasilkan JPG yang dapat
-diekstrak. Untuk payload besar, pilih PNG. Ketik password pada tab ekstraksi,
-uji serangan, atau evaluasi sebelum menjalankannya.
+diekstrak. Untuk payload besar, pilih PNG. Navigasi halaman berada di sidebar;
+password dan pengaturan penyisipan berada di halaman Sisipkan. Nama berkas stego
+dapat disesuaikan, sedangkan ekstensi mengikuti format yang dipilih.
 
 Modul tambahan: `image_io.py` (baca/simpan), `image_stego.py` (transport
 PNG/JPEG dan verifikasi), `analysis_service.py` (evaluasi gambar pilihan),
+`ui_common.py` (komponen antarmuka bersama), `app_pages/` (halaman Streamlit),
 dan `tests/test_image_workflows.py` (regresi format dan hasil evaluasi).
 
 Dokumentasi dan laporan v2 di bawah merupakan rancangan LSB awal; angka
@@ -71,7 +77,7 @@ python cli.py embed   --cover foto.png --payload rahasia.txt --out stego.png --e
 python cli.py extract --stego stego.png --out hasil.txt
 python cli.py capacity --cover foto.png
 python cli.py analyze --cover foto.png --stego stego.png
-python -m unittest discover -s tests -v              # 18 unit test
+python -m unittest discover -s tests -v              # tes unit dan alur UI
 python evaluate.py                                   # seluruh eksperimen (± 8 menit) → results/*.csv, figures/*.png
 ```
 Password dibaca dari prompt (`getpass`) atau env `STEGO_PASSWORD` bila `--password` tidak diberikan. Simpan stego sebagai **PNG** (lossless).

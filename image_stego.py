@@ -12,7 +12,7 @@ import stegocrypt as sc
 from image_io import encode_image, load_image
 
 COEFFICIENTS = ((1, 2), (2, 1), (2, 2), (1, 3))
-QIM_STEP = 48.0
+QIM_STEP = 16.0
 JPEG_ECC = 3
 
 
@@ -126,12 +126,17 @@ def extract(image, password, backend="auto"):
     if backend not in ("auto", "lsb", "dct"):
         raise ValueError("Metode ekstraksi tidak dikenal.")
     methods = ("lsb", "dct") if backend == "auto" else (backend,)
+    failures = []
     for method in methods:
         try:
             return sc.extract(_carrier(image) if method == "dct" else image, password)
-        except (sc.ExtractionError, ValueError):
-            continue
-    raise sc.ExtractionError("Pesan tidak dapat dipulihkan: password salah, gambar tidak berisi pesan yang didukung, atau data rusak.")
+        except (sc.ExtractionError, ValueError) as exc:
+            failures.append(f"{'LSB' if method == 'lsb' else 'DCT-QIM'}: {exc}")
+    detail = " | ".join(failures)
+    raise sc.ExtractionError(
+        "Pesan tidak dapat dipulihkan. Pastikan password benar dan gunakan gambar stego asli "
+        "yang belum diubah atau dikompres ulang. Password salah dan kerusakan data tidak selalu "
+        f"dapat dibedakan. Detail pemeriksaan: {detail}")
 
 
 def read_body_bits(image, info):

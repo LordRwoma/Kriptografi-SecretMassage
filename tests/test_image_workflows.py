@@ -43,6 +43,14 @@ class TestImageWorkflows(unittest.TestCase):
                 self.assertEqual(info["backend"], "dct")
                 np.testing.assert_array_equal(saved, reloaded)
 
+    def test_jpeg_improved_visual_quality_and_roundtrip(self):
+        payload = os.urandom(800)
+        saved, info, encoded = transport.embed(self.cover, payload, PASSWORD, "JPEG")
+        self.assertEqual(transport.extract(saved, PASSWORD), payload)
+        self.assertTrue(info["verified"])
+        self.assertGreater(live.quality(self.cover, saved)["PSNR_dB"], 34)
+        self.assertTrue(encoded.startswith(b"\xff\xd8"))
+
     def test_jpeg_binary_at_capacity_and_over_capacity(self):
         n = transport.capacity_bytes(self.cover.shape, "JPEG")
         payload = os.urandom(n)
@@ -107,6 +115,33 @@ class TestImageWorkflows(unittest.TestCase):
             load_image(io.BytesIO(b"not an image"))
         with self.assertRaises(ValueError):
             transport.embed(np.zeros((16, 16, 3), np.uint8), b"x", PASSWORD, "JPEG")
+
+    def test_svg_cover_rasterizes_to_bounded_png_pixels(self):
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" '
+            b'viewBox="0 0 200 100"><rect width="200" height="100" fill="#ff0000"/></svg>'
+        )
+        cover = load_image(io.BytesIO(svg), svg_max_edge=512)
+        self.assertEqual(cover.shape, (256, 512, 3))
+        np.testing.assert_array_equal(cover[128, 256], [255, 0, 0])
+        payload = b"vector cover round trip"
+        stego, _, encoded = transport.embed(cover, payload, PASSWORD)
+        self.assertTrue(encoded.startswith(b"\x89PNG"))
+        self.assertEqual(transport.extract(stego, PASSWORD), payload)
+
+    def test_svg_external_resources_and_entities_rejected(self):
+        external = (
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
+            b'<image href="https://example.invalid/image.png"/></svg>'
+        )
+        with self.assertRaisesRegex(ValueError, "referensi gambar eksternal"):
+            load_image(io.BytesIO(external))
+        entity = (
+            b'<!DOCTYPE svg [<!ENTITY x "x">]><svg xmlns="http://www.w3.org/2000/svg" '
+            b'width="20" height="20">&x;</svg>'
+        )
+        with self.assertRaisesRegex(ValueError, "DTD/entity"):
+            load_image(io.BytesIO(entity))
 
 
 if __name__ == "__main__":
