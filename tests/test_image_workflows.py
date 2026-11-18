@@ -141,6 +141,32 @@ class TestImageWorkflows(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "maksimal 20 MiB"):
             load_image(io.BytesIO(over_limit))
 
+    def test_svg_honors_declared_legacy_and_utf16_encodings(self):
+        iso_8859_svg = (
+            '<?xml version="1.0" encoding="ISO-8859-1"?>'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
+            '<!-- café --><rect width="20" height="20" fill="#ff0000"/></svg>'
+        ).encode("iso-8859-1")
+        self.assertEqual(load_image(io.BytesIO(iso_8859_svg)).shape, (1024, 1024, 3))
+
+        utf16_svg = (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
+            '<rect width="20" height="20" fill="#00ff00"/></svg>'
+        ).encode("utf-16")
+        uploaded_svg = io.BytesIO(utf16_svg)
+        uploaded_svg.name = "cover.svg"
+        self.assertEqual(load_image(uploaded_svg).shape, (1024, 1024, 3))
+
+    def test_svg_with_mismatched_encoding_declaration_has_actionable_error(self):
+        svg = (
+            b'<?xml version="1.0" encoding="UTF-8"?>'
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
+            b'<!-- \xe9 --><rect width="20" height="20"/></svg>'
+        )
+        with self.assertRaisesRegex(ValueError, "Periksa deklarasi encoding XML"):
+            load_image(io.BytesIO(svg))
+
     def test_svg_external_resources_and_entities_rejected(self):
         external = (
             b'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
