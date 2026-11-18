@@ -78,6 +78,13 @@ def render():
         "Gagal dipulihkan": int((~frame.autentikasi_valid).sum()),
     })
     st.dataframe(frame, hide_index=True)
+    st.download_button(
+        "Unduh Hasil Uji Serangan (CSV)",
+        frame.to_csv(index=False).encode("utf-8"),
+        "hasil_uji_serangan.csv",
+        "text/csv",
+        help="Unduh tabel hasil pengujian ketahanan serangan dalam format CSV.",
+    )
     if target["info"] is not None:
         st.bar_chart(frame.set_index("serangan")[["BER"]])
     if record["preview"] is not None:

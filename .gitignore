@@ -1,4 +1,6 @@
 .venv/
+venv/
+~$*.docx
 .test-wheels/
 __pycache__/
 *.pyc

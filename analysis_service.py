@@ -19,8 +19,127 @@ def quality(cover, stego):
 
 
 def steganalysis(image):
-    return dict(RS_estimasi=M.rs_estimate(image), chi2_p=M.chi2_pvalue(image),
-                korelasi_horizontal=M.adjacent_corr(image))
+    return dict(
+        RS_estimasi=M.rs_estimate(image),
+        chi2_p=M.chi2_pvalue(image),
+        korelasi_horizontal=M.adjacent_corr(image, "h"),
+        korelasi_vertikal=M.adjacent_corr(image, "v"),
+        korelasi_diagonal=M.adjacent_corr(image, "d"),
+    )
+
+
+def make_benchmark_payload(n: int) -> bytes:
+    words = (
+        "keamanan data kriptografi steganografi citra kunci enkripsi pesan rahasia "
+        "sistem algoritma blok sandi digital integritas autentikasi jaringan protokol "
+        "payload piksel warna kanal saluran bit byte hash tanda tangan sembunyi ekstraksi"
+    ).split()
+    rng = np.random.default_rng(n)
+    out, length = [], 0
+    while length < n:
+        w = words[rng.integers(len(words))] + " "
+        out.append(w)
+        length += len(w)
+    return "".join(out).encode("utf-8")[:n]
+
+
+def compute_10_payload_sizes(capacity: int) -> list[int]:
+    if capacity < 16:
+        return [capacity] if capacity > 0 else []
+    if capacity >= 1000:
+        fractions = [0.0002, 0.0008, 0.003, 0.01, 0.04, 0.10, 0.25, 0.50, 0.75, 1.0]
+        sizes = [max(16, int(round(f * capacity))) for f in fractions]
+    else:
+        sizes = np.geomspace(16, capacity, num=10).round().astype(int).tolist()
+
+    unique_sizes = []
+    for s in sizes:
+        s = min(max(16, s), capacity)
+        if not unique_sizes or s > unique_sizes[-1]:
+            unique_sizes.append(s)
+
+    while len(unique_sizes) < 10 and len(unique_sizes) < capacity - 16 + 1:
+        gaps = [(unique_sizes[i + 1] - unique_sizes[i], i) for i in range(len(unique_sizes) - 1)]
+        gaps.sort(reverse=True)
+        max_gap, idx = gaps[0]
+        if max_gap <= 1:
+            break
+        mid = (unique_sizes[idx] + unique_sizes[idx + 1]) // 2
+        unique_sizes.insert(idx + 1, mid)
+
+    if unique_sizes and unique_sizes[-1] != capacity:
+        unique_sizes[-1] = capacity
+
+    return unique_sizes
+
+
+def benchmark_10_payloads(
+    cover: np.ndarray,
+    password: str,
+    output_format: str = "PNG",
+    mode: str = "matrix",
+    ecc: int = 0,
+    compress: bool = False,
+    progress_callback=None,
+) -> list[dict]:
+    """Run full 10-payload benchmark on the given cover image."""
+    cap = transport.capacity_bytes(cover.shape, output_format, ecc)
+    if cap < 16:
+        raise ValueError(
+            f"Kapasitas gambar ({cap} byte) terlalu kecil untuk pengujian 10 payload (minimal 16 byte)."
+        )
+    sizes = compute_10_payload_sizes(cap)
+    if not sizes:
+        raise ValueError("Gagal menghitung ukuran payload untuk pengujian.")
+
+    rows = []
+    total = len(sizes)
+    for i, sz in enumerate(sizes):
+        payload = make_benchmark_payload(sz)
+        t_start_emb = time.perf_counter()
+        saved, info, _ = transport.embed(
+            cover,
+            payload,
+            password,
+            output_format=output_format,
+            mode=mode,
+            ecc=ecc,
+            compress=compress,
+        )
+        t_emb_ms = (time.perf_counter() - t_start_emb) * 1000
+
+        t_start_ext = time.perf_counter()
+        extracted = transport.extract(saved, password, backend=info.get("backend", "auto"))
+        t_ext_ms = (time.perf_counter() - t_start_ext) * 1000
+
+        identical = extracted == payload
+        ber_val = M.ber(info["body_bits"], transport.read_body_bits(saved, info))
+        psnr_val = M.psnr(cover, saved)
+        ssim_val = M.ssim(cover, saved)
+        mse_val = M.mse(cover, saved)
+        changed_pct = float(100 * np.mean(cover != saved))
+        bpp_val = float(8 * len(payload) / (cover.shape[0] * cover.shape[1]))
+
+        row = {
+            "No": i + 1,
+            "Payload (B)": len(payload),
+            "% Kapasitas": round(100 * len(payload) / max(cap, 1), 2),
+            "bpp": round(bpp_val, 4),
+            "MSE": round(mse_val, 6),
+            "PSNR (dB)": round(psnr_val, 2),
+            "SSIM": round(ssim_val, 5),
+            "Piksel Berubah (%)": round(changed_pct, 3),
+            "BER": round(ber_val, 6),
+            "Hash Cocok": "Ya" if identical else "Tidak",
+            "Waktu Embed (ms)": round(t_emb_ms, 1),
+            "Waktu Extract (ms)": round(t_ext_ms, 1),
+            "k Hamming": info.get("k", 1),
+        }
+        rows.append(row)
+        if progress_callback:
+            progress_callback((i + 1) / total, row)
+
+    return rows
 
 
 def run_attack(stego, name, password, expected=None, info=None):

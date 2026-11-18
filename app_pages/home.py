@@ -77,9 +77,13 @@ def render():
                     st.page_link(page_paths[title], label=f"Buka {title}")
 
     st.warning(
-        "Gunakan password yang sama saat mengekstrak dan simpan file stego asli. "
-        "Mengedit, mengubah ukuran, atau mengompres ulang gambar—terutama JPEG—"
-        "dapat merusak payload."
+        "⚠️ **Panduan Penting Penggunaan & Pengiriman Stego:**\n\n"
+        "- **Kirim sebagai Dokumen (Bukan Foto Galeri)**: Aplikasi pesan instan (seperti WhatsApp, Telegram, atau Instagram) "
+        "selalu mengompresi gambar yang dikirim sebagai foto/media biasa, sehingga bit-bit steganografi akan rusak total. "
+        "Selalu kirimkan file stego sebagai **Dokumen / Berkas Asli** tanpa kompresi.\n"
+        "- **Hindari Resize & Cropping Nyata**: Mengubah resolusi (lebar/tinggi) atau memotong gambar akan "
+        "mengacaukan permutasi acak berkunci penyisipan.\n"
+        "- **Password**: Gunakan password yang sama persis saat menyisipkan dan mengekstrak pesan."
     )
 
 

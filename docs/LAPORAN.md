@@ -17,7 +17,7 @@ Kriptografi menyembunyikan *isi* pesan, tetapi keberadaan ciphertext yang acak t
 3. Seberapa besar peningkatan yang diperoleh dari perbaikan desain (matrix embedding, posisi acak berkunci, ECC) dibandingkan LSB standar?
 
 ## 1.3 Batasan
-Media: citra RGB/grayscale 8-bit yang disimpan sebagai PNG (lossless). Payload: byte sembarang (teks, biner, berkas). Steganalisis yang diuji: chi-kuadrat, RS analysis, dan detektor SPAM + regresi logistik; bukan detektor mutakhir berbasis deep learning.
+Media: citra RGB/grayscale 8-bit dengan dukungan format raster (PNG, JPG/JPEG, WebP, BMP, TIFF, dsb.) dan vektor SVG terasterisasi. Format keluaran stego mendukung dua jalur: (1) **PNG** (lossless) via LSB Matching + Matrix Embedding dengan kapasitas tinggi, dan (2) **JPEG asli** via DCT-QIM pada koefisien luminans blok 8×8 dengan ECC 3 wajib untuk ketahanan terhadap penyimpanan format JPEG. Payload: byte sembarang (teks, biner, berkas). Steganalisis yang diuji: chi-kuadrat, RS analysis, dan detektor SPAM + regresi logistik; bukan detektor mutakhir berbasis deep learning.
 
 ## 1.4 Kontribusi (peningkatan dari versi awal)
 | # | Peningkatan v2 | Alasan |
@@ -30,12 +30,15 @@ Media: citra RGB/grayscale 8-bit yang disimpan sebagai PNG (lossless). Payload: 
 | 6 | Steganalisis bertingkat: RS, χ² (kini dipakai), SPAM + ML *leave-one-cover-out* | v1 hanya RS pada satu citra |
 | 7 | 8 citra sampul, uji keacakan NIST (monobit, runs, χ² byte), uji jenis payload, avalanche | Evaluasi lebih luas dan lebih jujur |
 | 8 | scrypt N=2^15 (32 MiB), password via prompt/env | Biaya tebak password lebih tinggi; password tidak tersimpan di riwayat shell |
-| 9 | GUI Streamlit, CLI diperluas, 18 unit test | Mudah didemokan dan diverifikasi |
+| 9 | GUI Streamlit multi-halaman, CLI diperluas, 43 unit test | Memastikan seluruh alur kripto, format citra, dan UI terverifikasi secara otomatis |
+| 10 | **Dukungan format ganda (Lossless PNG & Real JPEG via DCT-QIM)** serta SVG | Memungkinkan penggunaan format JPEG asli yang tahan kompresi simpan dan mendukung input SVG |
 
 # 2. Landasan teori ringkas
 **AES-256-GCM** (NIST SP 800-38D) adalah enkripsi terautentikasi (AEAD): kerahasiaan lewat mode CTR dan integritas lewat tag 128 bit. **scrypt** (Percival, 2009) adalah KDF *memory-hard* yang memperlambat tebak password; **HKDF** (RFC 5869) memecah kunci induk menjadi kunci AES, kunci PRF posisi, dan mask header.
 
 **LSB replacement** menimpa bit terakhir sehingga pasangan nilai (2k, 2k+1) menjadi seimbang dan terdeteksi uji χ² (Westfeld & Pfitzmann, 1999). **LSB matching** (Mielikäinen, 2006) menambah atau mengurangi 1 secara acak bila bit tidak cocok, sehingga tidak meninggalkan efek "tangga" pada histogram. **Matrix embedding** (Crandall, 1998; dipakai F5, Westfeld 2001) menyisipkan k bit pada grup 2^k−1 nilai dengan paling banyak 1 perubahan per grup; efisiensi naik dari 2 bit/perubahan menjadi k·2^k/(2^k−1) bit/perubahan. **Reed-Solomon** (1960) mengoreksi kesalahan simbol pada GF(2^8).
+
+**DCT (Discrete Cosine Transform)** mentransformasikan blok citra 8×8 dari domain spasial ke domain frekuensi. **QIM (Quantization Index Modulation)** menyisipkan informasi dengan menguantisasi koefisien frekuensi luminans terpilih ke kisi kuantisasi terdekat sesuai nilai bit pesan, sehingga pesan dapat bertahan dalam berkas berformat JPEG asli.
 
 Metrik: **MSE**, **PSNR** = 10·log10(255²/MSE), **SSIM** (Wang dkk., 2004), **BER** bit tersisip, **entropi Shannon** ciphertext, uji keacakan NIST SP 800-22 (monobit, runs), uji χ² keseragaman byte, **RS analysis** (Fridrich dkk., 2001), dan fitur **SPAM** (Pevný dkk., 2010).
 
@@ -55,23 +58,28 @@ Kriptografi menghasilkan aliran bit acak yang terautentikasi, sedangkan steganog
 | Mode ECC | header diulang 5× (1280 bit), dipulihkan dengan voting mayoritas | menghadapi kerusakan header |
 
 ## 3.3 Alur
-**Embed:** (1) password → scrypt → HKDF → {kunci AES, kunci PRF, mask}; (2) payload → zlib (opsional) → AES-256-GCM dengan AAD = header; (3) RS encode (opsional); (4) pilih k terbesar yang muat (k=1 bila ECC aktif); (5) tentukan posisi acak berkunci; (6) sisipkan dengan matrix embedding + LSB matching ±1; (7) simpan PNG.
-**Extract:** baca header → turunkan kunci → baca LSB pada posisi berkunci → decode Hamming → RS decode → verifikasi tag GCM → dekompresi. Bila ada kesalahan (password salah, tamper, kerusakan berat) sistem **menolak**, tidak pernah mengembalikan data salah.
+**Embed (Jalur PNG):** (1) password → scrypt → HKDF → {kunci AES, kunci PRF, mask}; (2) payload → zlib (opsional) → AES-256-GCM dengan AAD = header; (3) RS encode (opsional); (4) pilih k terbesar yang muat (k=1 bila ECC aktif); (5) tentukan posisi acak berkunci; (6) sisipkan dengan matrix embedding + LSB matching ±1; (7) simpan PNG.
+**Embed (Jalur JPEG):** (1) cover dipetakan ke koefisien luminans frekuensi blok 8×8 (DCT); (2) bit pesan terenkripsi AES-GCM + ECC 3 wajib disisipkan via kuantisasi paritas (QIM step 16) pada 4 koefisien frekuensi terpilih; (3) rekonstruksi citra (IDCT) + penyesuaian kecerahan blok DC; (4) simpan berkas JPEG kualitas 95 dan verifikasi ekstraksi otomatis sebelum diterbitkan.
+**Extract:** deteksi otomatis jalur backend (LSB spasial atau DCT frekuensi) → baca header → turunkan kunci → baca bit pada posisi berkunci → decode Hamming (bila k>1) → RS decode → verifikasi tag GCM → dekompresi. Bila ada kesalahan (password salah, tamper, kerusakan berat) sistem **menolak**, tidak pernah mengembalikan data salah.
 
 ## 3.4 Model ancaman
 Penyerang boleh mengetahui algoritma (prinsip Kerckhoffs), memiliki stego, dan dapat memodifikasinya atau menjalankan steganalisis; ia tidak mengetahui password. Sasaran: kerahasiaan isi, integritas, dan ketidakterdeteksian praktis pada beban rendah-menengah.
 
 # 4. Implementasi
-Bahasa Python 3.12 (NumPy, SciPy, scikit-image/learn, OpenCV, `cryptography`, `reedsolo`, Streamlit).
+Bahasa Python 3.10/3.12 (NumPy, SciPy, scikit-image/learn, OpenCV, `cryptography`, `reedsolo`, `resvg-py`, Streamlit).
 
 | Berkas | Fungsi |
 |---|---|
-| `stegocrypt.py` | inti: kriptografi, ECC, matrix embedding, `embed`/`extract` |
+| `stegocrypt.py` | inti: kriptografi (AES-256-GCM, scrypt, HKDF), ECC, matrix embedding, LSB matching |
+| `image_stego.py` | transport format ganda (PNG/LSB dan JPEG/DCT-QIM) serta verifikasi roundtrip |
+| `image_io.py` | decoding citra raster multi-format dan rasterisasi vektor SVG |
+| `analysis_service.py` | evaluasi live stego: kualitas citra, steganalisis, dan uji serangan sesi aktif |
+| `ui_common.py` | modul antarmuka bersama dan pemilih sumber target |
 | `metrics.py` | PSNR, SSIM, MSE, BER, entropi, NIST, RS, χ², SPAM + detektor ML |
 | `attacks.py` | 16 serangan (JPEG, noise, salt & pepper, median, blur, cropping, resize) |
 | `steganalysis.py`, `evaluate.py` | eksperimen dan pembuatan tabel/grafik |
-| `cli.py`, `app.py` | demo terminal dan GUI interaktif |
-| `tests/` | 18 unit test (roundtrip, kapasitas tepat, tamper, ECC, *golden vector* posisi) |
+| `cli.py`, `app.py`, `app_pages/` | demo terminal dan GUI interaktif Streamlit multi-halaman |
+| `tests/` | 43 unit test (keamanan kriptografi, format citra, alur antarmuka Streamlit) |
 
 Parameter: scrypt N=2^15, r=8, p=1; HKDF-SHA256; nonce 96 bit acak; tag 128 bit; RS(255,223/191/127) untuk ECC 1/2/3; k maksimum 12. Demo: `python cli.py demo` atau `streamlit run app.py`.
 
@@ -182,16 +190,16 @@ Password pendek tetap rentan; rekomendasi: passphrase ≥ 5 kata atau ≥ 12 kar
 * Waktu diukur pada satu mesin tanpa isolasi beban; memori hanya alokasi Python/NumPy.
 * Payload sintetis memudahkan pengamatan efek enkripsi; uji jenis payload mengurangi bias ini.
 * Tidak ada pengujian terhadap steganalisis mutakhir (SRM, CNN) maupun serangan *known-cover*.
-* Penyisipan di domain spasial; tidak tahan kompresi lossy.
+* Dukungan format JPEG memanfaatkan DCT-QIM dengan kapasitas yang jauh lebih terbatas dibanding LSB lossless.
 
 # 7. Kesimpulan dan saran
-1. Sistem Kriptografi + Steganografi berjalan end-to-end dan didemokan lewat CLI dan GUI; seluruh **10 payload (16 B–98.256 B)** pulih identik (hash cocok, BER = 0) dan 77 pengujian lintas 8 cover juga lolos.
-2. Kualitas sangat baik: PSNR 85,2 → 51,1 dB dan SSIM ≥ 0,993 dari payload terkecil hingga kapasitas penuh.
+1. Sistem Kriptografi + Steganografi berjalan end-to-end dan didemokan lewat CLI dan GUI; seluruh **10 payload (16 B–98.256 B)** pulih identik (hash cocok, BER = 0) dan 77 pengujian lintas 8 cover juga lolos, dengan total **43 unit test otomatis** (seluruhnya lulus).
+2. Kualitas sangat baik: PSNR 85,2 → 51,1 dB dan SSIM ≥ 0,993 dari payload terkecil hingga kapasitas penuh pada jalur PNG, serta PSNR > 34 dB pada jalur JPEG.
 3. Matrix embedding meningkatkan PSNR hingga +6,0 dB dan menurunkan jumlah perubahan ±5× pada payload ≤ 50% kapasitas, serta menurunkan AUC detektor SPAM + ML pada rasio ≤ 50% (kecenderungan, bukan bukti kuat).
 4. Keamanan: password salah ditolak 50/50, tamper terdeteksi 30/30, tidak pernah mengembalikan data salah; ciphertext lolos uji keacakan.
-5. Robustness LSB terbatas; ECC memberi ketahanan nyata hanya pada noise impuls dan cropping ringan, dengan harga kapasitas 14–50%.
+5. Robustness LSB terbatas; ECC memberi ketahanan nyata hanya pada noise impuls dan cropping ringan, dengan harga kapasitas 14–50%. Jalur JPEG DCT-QIM berhasil menyediakan format keluaran JPEG asli dengan verifikasi roundtrip mandiri.
 
-**Saran:** penyisipan domain DCT/DWT untuk ketahanan JPEG; penyisipan adaptif berbasis tekstur (HUGO/WOW/S-UNIWARD); uji steganalisis SRM/CNN pada BOSSbase; menambahkan kombinasi *secret sharing* sebagai pengembangan lanjutan.
+**Saran:** penyisipan adaptif berbasis tekstur (HUGO/WOW/S-UNIWARD); uji steganalisis SRM/CNN pada BOSSbase; menambahkan kombinasi *secret sharing* sebagai pengembangan lanjutan.
 
 # Referensi
 1. M. Dworkin, *Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC*, NIST SP 800-38D, 2007.
@@ -214,7 +222,7 @@ Password pendek tetap rentan; rekomendasi: passphrase ≥ 5 kata atau ≥ 12 kar
 pip install -r requirements.txt
 python cli.py demo                         # demo terminal
 streamlit run app.py                       # demo GUI
-python -m unittest discover -s tests -v    # 18 unit test
+python -m unittest discover -s tests -v    # 43 unit test
 python evaluate.py                         # seluruh eksperimen (±8 menit)
 ```
 Seluruh tabel mentah ada di `results/*.csv` dan grafik di `figures/*.png`.

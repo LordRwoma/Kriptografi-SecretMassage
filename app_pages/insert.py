@@ -64,12 +64,18 @@ def render():
         "Kompres payload sebelum enkripsi",
         help="Kompresi hanya mengurangi ukuran bila isi payload memang dapat dipadatkan.",
     )
-    source = st.radio("Citra sampul", ["Contoh bawaan", "Unggah sendiri"], horizontal=True)
+    source_choices = ["Contoh bawaan", "Unggah sendiri"]
+    if S.get("cover_from_extract") is not None:
+        source_choices.append("Hasil ekstraksi sebelumnya")
+    source = st.radio("Citra sampul", source_choices, horizontal=True)
     cover = None
     svg_max_edge = 1024
     if source == "Contoh bawaan":
         sample = st.selectbox("Pilih gambar", list(SAMPLES))
         cover = SAMPLES[sample]()
+    elif source == "Hasil ekstraksi sebelumnya":
+        cover = S["cover_from_extract"]
+        st.info(f"Menggunakan citra hasil ekstraksi ({cover.shape[1]}×{cover.shape[0]} piksel) sebagai sampul baru.")
     else:
         cover_upload = st.file_uploader(
             "Unggah sampul raster atau SVG",

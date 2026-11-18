@@ -76,6 +76,20 @@ def cmd_analyze(a):
     print(f"RS estimasi  cover={M.rs_estimate(c):.4f}  stego={M.rs_estimate(s):.4f}   |   chi² p  cover={M.chi2_pvalue(c):.3g}  stego={M.chi2_pvalue(s):.3g}")
 
 
+def cmd_benchmark(a):
+    import analysis_service as live
+    import pandas as pd
+    cov = load(a.cover)
+    fmt = a.format.upper()
+    print(f"{B}═══ Benchmark 10 Payload: {a.cover} ({cov.shape[1]}×{cov.shape[0]} px, format {fmt}) ═══{X}")
+    rows = live.benchmark_10_payloads(cov, pw(a), output_format=fmt, mode=a.mode, ecc=a.ecc)
+    df = pd.DataFrame(rows)
+    print(df.to_string(index=False))
+    if a.out:
+        df.to_csv(a.out, index=False)
+        print(ok(f"Tabel evaluasi 10 payload disimpan ke {a.out}"))
+
+
 def demo(a):
     from skimage import data as sd
     import attacks as A
@@ -108,9 +122,10 @@ def main():
     x = sub.add_parser("extract"); x.add_argument("--stego", required=True); x.add_argument("--out", required=True); x.add_argument("--password")
     c = sub.add_parser("capacity"); c.add_argument("--cover", required=True)
     n = sub.add_parser("analyze"); n.add_argument("--cover", required=True); n.add_argument("--stego", required=True)
+    b = sub.add_parser("benchmark"); b.add_argument("--cover", required=True); b.add_argument("--password"); b.add_argument("--format", default="PNG", choices=["PNG", "JPEG"]); b.add_argument("--mode", default="matrix", choices=sc.MODES); b.add_argument("--ecc", type=int, default=0, choices=[0, 1, 2, 3]); b.add_argument("--out")
     sub.add_parser("demo")
     a = ap.parse_args()
-    {"embed": cmd_embed, "extract": cmd_extract, "capacity": cmd_capacity, "analyze": cmd_analyze, "demo": demo}[a.cmd](a)
+    {"embed": cmd_embed, "extract": cmd_extract, "capacity": cmd_capacity, "analyze": cmd_analyze, "benchmark": cmd_benchmark, "demo": demo}[a.cmd](a)
 
 
 if __name__ == "__main__":

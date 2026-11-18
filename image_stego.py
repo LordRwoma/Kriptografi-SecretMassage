@@ -1,7 +1,7 @@
 """Serialized PNG/LSB and JPEG/DCT steganography with a common AES-GCM core.
 
 JPEG uses four low/mid-frequency luminance coefficients per complete 8x8
-block, parity QIM with step 48, and mandatory RS(255,127). Its capacity is
+block, parity QIM with step 16, and mandatory RS(255,127). Its capacity is
 smaller than spatial LSB. No metadata/trailing-byte payload is used.
 """
 import io
