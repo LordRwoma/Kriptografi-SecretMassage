@@ -29,13 +29,23 @@ def render():
         horizontal=True,
         key="attack_scope",
     )
-    names = [name for name, _ in A.SUITE]
+    category = st.selectbox("Kelompok serangan", ["Semua kelompok"] + sorted(
+        {details["kategori"] for details in A.DETAILS.values() if details["kategori"] != "Kontrol"}))
+    levels = st.multiselect("Tingkat gangguan", ["Ringan", "Sedang", "Berat"],
+                            default=["Ringan", "Sedang", "Berat"])
+    names = [name for name, _ in A.ATTACK_SUITE if name == "Tanpa serangan" or
+             (A.DETAILS[name]["tingkat"] in levels and
+              (category == "Semua kelompok" or A.DETAILS[name]["kategori"] == category))]
     attack_name = st.selectbox(
         "Serangan",
         names,
         disabled=selected == "Seluruh serangan",
         help="Pilih satu serangan; daftar dinonaktifkan saat seluruh suite dijalankan.",
     )
+    st.caption(f"{len(names)} pengujian termasuk kontrol tanpa serangan. "
+               "Tingkat ringan/sedang/berat adalah pengaturan gangguan, bukan jaminan payload pulih.")
+    if selected == "Serangan terpilih":
+        st.caption(A.DETAILS[attack_name]["parameter"])
     token = (image_key(target["stego"]), hashlib.sha256(password.encode()).hexdigest())
     if not password:
         st.caption("Isi password untuk mengaktifkan tombol uji serangan.")
@@ -78,15 +88,25 @@ def render():
         "Gagal dipulihkan": int((~frame.autentikasi_valid).sum()),
     })
     st.dataframe(frame, hide_index=True)
-    if target["info"] is not None:
+    st.caption("Tabel ini adalah hasil pengujian terakhir; pilihan di atas diterapkan saat tombol uji ditekan. "
+               "PSNR/SSIM/MSE membandingkan stego sebelum dan sesudah serangan. "
+               "Waktu ekstraksi dipisahkan dari waktu total uji.")
+    st.download_button("Unduh tabel robustness (CSV)", live.attack_csv(record["rows"]),
+                       "robustness.csv", "text/csv")
+    if frame["BER"].notna().any():
         st.bar_chart(frame.set_index("serangan")[["BER"]])
+    st.bar_chart(frame.groupby("kategori")[["autentikasi_valid"]].mean().rename(
+        columns={"autentikasi_valid": "Proporsi autentikasi valid"}))
+    st.caption("Proporsi di atas hanya merangkum skenario dalam pengujian ini; bukan peluang ketahanan umum.")
     if record["preview"] is not None:
+        preview_name = st.selectbox("Pratinjau hasil serangan", frame.serangan.tolist(), key="attack_preview_name")
+        preview = dict(A.ATTACK_SUITE)[preview_name](target["stego"])
         left, right = st.columns(2)
         left.image(target["stego"], caption="Stego sebelum serangan", width="stretch")
-        right.image(record["preview"], caption=f"Hasil: {record['preview_name']}", width="stretch")
+        right.image(preview, caption=f"Hasil: {preview_name}", width="stretch")
         st.download_button(
             "Unduh gambar hasil serangan (PNG)",
-            image_io.encode_image(record["preview"]),
+            image_io.encode_image(preview),
             "hasil_serangan.png",
             "image/png",
             help="Unduhan berisi gambar setelah serangan dipilih; untuk 'Tanpa serangan' piksel tetap sama, hanya disimpan sebagai PNG.",

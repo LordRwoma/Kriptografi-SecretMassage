@@ -49,7 +49,8 @@ class TestAppWorkflows(unittest.TestCase):
         button("Jalankan uji serangan").click().run()
         no_error()
         rows = at.session_state["attack_result"]["rows"]
-        self.assertEqual(len(rows), 16)
+        import attacks as A
+        self.assertEqual(len(rows), len(A.ATTACK_SUITE))
         self.assertTrue(rows[0]["payload_identik"])
         at.run()
         self.assertEqual(at.session_state["attack_result"]["rows"], rows)
@@ -158,3 +159,30 @@ class TestAppWorkflows(unittest.TestCase):
         self.assertEqual(at.title[0].value, "Beranda StegoCrypt-X")
         self.assertTrue(any("Cara menggunakan" in block.value for block in at.header))
         self.assertTrue(any("Belum ada hasil" in metric.value for metric in at.metric))
+
+    def test_benchmark_page_runs_without_overwriting_stego(self):
+        from streamlit.testing.v1 import AppTest
+        import numpy as np
+
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=60).run()
+        cover = np.full((64, 64, 3), 120, np.uint8)
+        # The benchmark only consumes the cover from this record.
+        at.session_state["result"] = dict(cover=cover, stego=cover.copy(), payload=b"original",
+                                           format="PNG", info=dict(verified=True))
+        at.switch_page("app_pages/benchmark.py").run()
+        at.radio(key="benchmark_source").set_value("Cover penyisipan terakhir").run()
+        at.radio(key="benchmark_sizing").set_value("Ukuran manual (byte)").run()
+        next(w for w in at.text_input if w.label == "Daftar ukuran byte, pisahkan dengan koma").set_value("16,32").run()
+        next(w for w in at.number_input if w.label == "Pengulangan terukur").set_value(1).run()
+        at.text_input(key="benchmark_password").set_value("test-benchmark-ui").run()
+        next(w for w in at.button if w.label == "Jalankan benchmark").click().run()
+        self.assertEqual([error.message for error in at.exception], [])
+        self.assertFalse(at.session_state["benchmark_result"]["errors"])
+        self.assertEqual(len(at.session_state["benchmark_result"]["rows"]), 10)
+        self.assertEqual(at.session_state["result"]["payload"], b"original")
+        np.testing.assert_array_equal(at.session_state["result"]["cover"], cover)
+        self.assertTrue(at.session_state["benchmark_zip"].startswith(b"PK"))
+        at.run()
+        self.assertEqual([error.message for error in at.exception], [])
+        self.assertEqual(len(at.session_state["benchmark_result"]["rows"]), 10)

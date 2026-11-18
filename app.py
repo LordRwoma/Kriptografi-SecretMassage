@@ -42,6 +42,12 @@ page = st.navigation(
                 icon=":material/assessment:",
                 help="Evaluasi gambar aktif dan lihat arsip eksperimen historis secara terpisah.",
             ),
+            st.Page(
+                "app_pages/benchmark.py",
+                title="Complexity & Efisiensi",
+                icon=":material/speed:",
+                help="Benchmark waktu dan memori pada berbagai ukuran payload serta resolusi cover.",
+            ),
         ]
     },
     position="sidebar",
