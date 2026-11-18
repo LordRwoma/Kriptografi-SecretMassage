@@ -192,13 +192,12 @@ class TestAppWorkflows(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         import numpy as np
 
-        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app_pages", "benchmark.py"))
         at = AppTest.from_file(app, default_timeout=60).run()
         cover = np.full((64, 64, 3), 120, np.uint8)
         # The benchmark only consumes the cover from this record.
         at.session_state["result"] = dict(cover=cover, stego=cover.copy(), payload=b"original",
                                            format="PNG", info=dict(verified=True))
-        at.switch_page("app_pages/benchmark.py").run()
         at.radio(key="benchmark_source").set_value("Cover penyisipan terakhir").run()
         at.radio(key="benchmark_sizing").set_value("Ukuran manual (byte)").run()
         next(w for w in at.text_input if w.label == "Daftar ukuran byte, pisahkan dengan koma").set_value("16,32").run()

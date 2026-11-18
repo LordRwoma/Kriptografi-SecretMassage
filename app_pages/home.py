@@ -45,7 +45,6 @@ def render():
 3. Tekan **Enkripsi & sisipkan**. Aplikasi menyimpan hasil dan memeriksa apakah payload dapat diekstrak kembali.
 4. Unduh gambar stego. Untuk mengambil payload, buka **Ekstrak**, gunakan gambar tersebut dan password yang sama.
 5. Jika diperlukan, buka **Steganalisis**, **Uji serangan**, atau **Evaluasi** untuk memeriksa karakteristik dan ketahanan hasil.
-6. Buka **Complexity & Efisiensi** untuk mengukur waktu dan memori pada beberapa ukuran payload dan resolusi.
 """
     )
 
@@ -59,7 +58,6 @@ def render():
         (
             ("Uji serangan", "Amati apakah payload masih dapat dipulihkan setelah gambar mengalami perubahan. Serangan memang dapat merusak pesan."),
             ("Evaluasi", "Lihat metrik kualitas jika cover tersedia dan bandingkan hasil sesi dengan arsip eksperimen."),
-            ("Complexity & Efisiensi", "Ukur waktu dan memori di proses terpisah, lalu unduh tabel dan grafik benchmark."),
         ),
     )
     page_paths = {
@@ -68,7 +66,6 @@ def render():
         "Steganalisis": "app_pages/analysis.py",
         "Uji serangan": "app_pages/attacks.py",
         "Evaluasi": "app_pages/evaluation.py",
-        "Complexity & Efisiensi": "app_pages/benchmark.py",
     }
     for row in feature_rows:
         columns = st.columns(len(row))

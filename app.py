@@ -36,11 +36,6 @@ page = st.navigation(
                 title="Evaluasi",
                 icon=":material/assessment:",
             ),
-            st.Page(
-                "app_pages/benchmark.py",
-                title="Complexity & Efisiensi",
-                icon=":material/speed:",
-            ),
         ]
     },
     position="sidebar",
