@@ -12,6 +12,7 @@ class TestAppWorkflows(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
         at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/insert.py").run()
 
         def button(label):
             return next(widget for widget in at.button if widget.label == label)
@@ -76,6 +77,7 @@ class TestAppWorkflows(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
         at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/insert.py").run()
         at.text_input(key="insert_password").set_value("uji-gui-2026").run()
         next(widget for widget in at.button if widget.label == "Enkripsi & sisipkan").click().run()
         at.switch_page("app_pages/attacks.py").run()
@@ -88,6 +90,7 @@ class TestAppWorkflows(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
         at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/insert.py").run()
         at.text_input(key="insert_password").set_value("uji-gui-2026").run()
         next(widget for widget in at.radio if widget.label == "Sumber payload").set_value("File").run()
         at.file_uploader(key="payload_upload").set_value(
@@ -103,6 +106,7 @@ class TestAppWorkflows(unittest.TestCase):
 
         app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
         at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/insert.py").run()
         next(widget for widget in at.selectbox if widget.label == "Format hasil stego").set_value("JPEG").run()
         next(widget for widget in at.radio if widget.label == "Citra sampul").set_value("Unggah sendiri").run()
         image_bytes = encode_image(np.zeros((64, 64, 3), dtype=np.uint8))
@@ -129,8 +133,19 @@ class TestAppWorkflows(unittest.TestCase):
 
         app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
         at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/insert.py").run()
         at.text_input(key="insert_password").set_value("uji-gui-2026").run()
         at.text_input[1].set_value("kelas-final.jpg").run()
         next(widget for widget in at.selectbox if widget.label == "Format hasil stego").set_value("PNG").run()
         next(widget for widget in at.button if widget.label == "Enkripsi & sisipkan").click().run()
         self.assertEqual(at.session_state["result"]["filename"], "kelas-final.png")
+
+    def test_homepage_shows_dashboard_and_usage_guide(self):
+        from streamlit.testing.v1 import AppTest
+
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        self.assertEqual([error.message for error in at.exception], [])
+        self.assertEqual(at.title[0].value, "Beranda StegoCrypt-X")
+        self.assertTrue(any("Cara menggunakan" in block.value for block in at.header))
+        self.assertTrue(any("Belum ada hasil" in metric.value for metric in at.metric))

@@ -7,6 +7,12 @@ page = st.navigation(
     {
         "StegoCrypt-X": [
             st.Page(
+                "app_pages/home.py",
+                title="Beranda",
+                icon=":material/home:",
+                help="Ringkasan aplikasi, status hasil sesi, dan panduan singkat penggunaan.",
+            ),
+            st.Page(
                 "app_pages/insert.py",
                 title="Sisipkan",
                 icon=":material/lock:",
