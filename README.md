@@ -46,6 +46,8 @@ GUI: pilih **Format hasil stego → JPEG** untuk menghasilkan JPG yang dapat
 diekstrak. Untuk payload besar, pilih PNG. Navigasi halaman berada di sidebar;
 password dan pengaturan penyisipan berada di halaman Sisipkan. Nama berkas stego
 dapat disesuaikan, sedangkan ekstensi mengikuti format yang dipilih.
+Halaman **Beranda** merangkum fitur, status hasil sesi terakhir, dan langkah
+penggunaan dari penyisipan hingga ekstraksi.
 
 Modul tambahan: `image_io.py` (baca/simpan), `image_stego.py` (transport
 PNG/JPEG dan verifikasi), `analysis_service.py` (evaluasi gambar pilihan),
