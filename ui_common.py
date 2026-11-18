@@ -8,7 +8,7 @@ import streamlit as st
 from skimage import data as skdata
 
 import image_stego as transport
-from image_io import IMAGE_TYPES, VECTOR_IMAGE_TYPES, load_image
+from image_io import IMAGE_TYPES, MAX_SVG_BYTES, VECTOR_IMAGE_TYPES, load_image
 
 S = st.session_state
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +30,10 @@ ECC_LABEL = {
     2: "ECC 2 — RS(255,191)",
     3: "ECC 3 — RS(255,127)",
 }
-IMAGE_FORMAT_HELP = "Raster: PNG, JPG/JPEG, BMP, WebP, TIF/TIFF, GIF, ICO, PPM/PGM, JPEG 2000, AVIF. Sampul juga menerima SVG."
+IMAGE_FORMAT_HELP = (
+    "Raster: PNG, JPG/JPEG, BMP, WebP, TIF/TIFF, GIF, ICO, PPM/PGM, JPEG 2000, AVIF. "
+    f"Sampul juga menerima SVG hingga {MAX_SVG_BYTES // (1024 * 1024)} MiB."
+)
 METRIC_HELP = {
     "PSNR (dB)": "Perkiraan kualitas terhadap cover asli. Nilai lebih tinggi berarti perbedaan lebih kecil.",
     "SSIM": "Kemiripan struktur visual, biasanya 0–1. Nilai mendekati 1 berarti lebih mirip.",

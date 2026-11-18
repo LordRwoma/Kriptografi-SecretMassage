@@ -129,6 +129,18 @@ class TestImageWorkflows(unittest.TestCase):
         self.assertTrue(encoded.startswith(b"\x89PNG"))
         self.assertEqual(transport.extract(stego, PASSWORD), payload)
 
+    def test_svg_larger_than_two_mib_is_accepted_but_over_limit_is_rejected(self):
+        prefix = b'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
+        content = b'<rect width="20" height="20" fill="#ff0000"/>'
+        suffix = b"</svg>"
+        over_two_mib = prefix + b" " * (2 * 1024 * 1024) + content + suffix
+        image = load_image(io.BytesIO(over_two_mib))
+        self.assertEqual(image.shape, (1024, 1024, 3))
+
+        over_limit = prefix + b" " * (20 * 1024 * 1024) + content + suffix
+        with self.assertRaisesRegex(ValueError, "maksimal 20 MiB"):
+            load_image(io.BytesIO(over_limit))
+
     def test_svg_external_resources_and_entities_rejected(self):
         external = (
             b'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'

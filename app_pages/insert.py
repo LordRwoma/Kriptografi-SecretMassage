@@ -9,7 +9,7 @@ import streamlit as st
 import image_stego as transport
 import metrics as M
 import stegocrypt as sc
-from image_io import IMAGE_TYPES, VECTOR_IMAGE_TYPES
+from image_io import IMAGE_TYPES, MAX_SVG_BYTES, VECTOR_IMAGE_TYPES
 from ui_common import (
     ECC_LABEL,
     IMAGE_FORMAT_HELP,
@@ -76,6 +76,12 @@ def render():
             type=IMAGE_TYPES + VECTOR_IMAGE_TYPES,
             key="cover_upload",
             help=IMAGE_FORMAT_HELP,
+        )
+        max_upload_mb = st.get_option("server.maxUploadSize")
+        svg_limit_mib = MAX_SVG_BYTES // (1024 * 1024)
+        st.caption(
+            f"Batas unggah umum: {max_upload_mb} MB per file. "
+            f"Batas khusus SVG: {svg_limit_mib} MiB karena harus dirasterisasi."
         )
         if cover_upload and cover_upload.name.lower().endswith(".svg"):
             svg_max_edge = st.selectbox(

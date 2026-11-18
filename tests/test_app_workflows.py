@@ -113,6 +113,15 @@ class TestAppWorkflows(unittest.TestCase):
         at.file_uploader(key="cover_upload").set_value(("small.png", image_bytes, "image/png")).run()
         self.assertTrue(any("tidak memiliki kapasitas" in warning.value for warning in at.warning))
 
+    def test_svg_upload_limit_is_explained(self):
+        from streamlit.testing.v1 import AppTest
+
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/insert.py").run()
+        next(widget for widget in at.radio if widget.label == "Citra sampul").set_value("Unggah sendiri").run()
+        self.assertTrue(any("Batas khusus SVG: 20 MiB" in caption.value for caption in at.caption))
+
     def test_source_selectors_have_distinct_labels(self):
         from streamlit.testing.v1 import AppTest
         app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
