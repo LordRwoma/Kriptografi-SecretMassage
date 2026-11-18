@@ -112,8 +112,14 @@ def target_selector(key, with_cover=False):
             f"Hasil tersimpan: {result['format']} · {filename} · "
             f"{len(result['payload']):,} byte payload"
         )
-        return dict(stego=result["stego"], cover=result["cover"],
-                    expected=result["payload"], info=result["info"])
+        return dict(
+            stego=result["stego"],
+            cover=result["cover"],
+            cover_name=result.get("cover_name", "Cover dari penyisipan terakhir"),
+            stego_name=filename,
+            expected=result["payload"],
+            info=result["info"],
+        )
 
     upload = st.file_uploader(
         "Gambar stego (raster)", type=IMAGE_TYPES, key=f"{key}_stego",
@@ -141,4 +147,11 @@ def target_selector(key, with_cover=False):
         if cover is not None and image is not None and cover.shape != image.shape:
             st.error("Dimensi cover dan stego berbeda. Unggah pasangan dengan dimensi yang sama.")
             return None
-    return None if image is None else dict(stego=image, cover=cover, expected=None, info=None)
+    return None if image is None else dict(
+        stego=image,
+        cover=cover,
+        cover_name=cover_upload.name if with_cover and cover is not None else None,
+        stego_name=upload.name,
+        expected=None,
+        info=None,
+    )

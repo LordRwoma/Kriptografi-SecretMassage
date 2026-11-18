@@ -81,6 +81,7 @@ def render():
     )
 
     bench_cover = target.get("cover") if target is not None else None
+    bench_cover_name = target.get("cover_name") if bench_cover is not None else None
     if bench_cover is None:
         source_opts = ["Contoh bawaan", "Unggah cover baru"]
         if target is not None and target.get("stego") is not None:
@@ -90,11 +91,14 @@ def render():
         b_src = st.radio("Sumber cover untuk pengujian 10 payload", source_opts, horizontal=True, key="b_src")
         if b_src == "Gunakan stego saat ini sebagai cover":
             bench_cover = target["stego"]
+            bench_cover_name = target.get("stego_name") or "Stego saat ini"
         elif b_src == "Gunakan gambar hasil ekstraksi":
             bench_cover = S["cover_from_extract"]
+            bench_cover_name = "Gambar hasil ekstraksi"
         elif b_src == "Contoh bawaan":
             s_name = st.selectbox("Pilih sampel gambar", list(SAMPLES), key="b_sample")
             bench_cover = SAMPLES[s_name]()
+            bench_cover_name = s_name
         else:
             b_up = st.file_uploader(
                 "Unggah citra sampul (raster / SVG)",
@@ -102,6 +106,8 @@ def render():
                 key="b_upload",
             )
             bench_cover = read_upload(b_up)
+            if bench_cover is not None:
+                bench_cover_name = b_up.name
     else:
         st.info(f"Menggunakan cover aktif ({bench_cover.shape[1]}×{bench_cover.shape[0]} piksel).")
 
@@ -155,6 +161,18 @@ def render():
                         ecc=b_ecc,
                         progress_callback=_update_prog,
                     )
+                    height, width = bench_cover.shape[:2]
+                    channels = "RGB" if bench_cover.ndim == 3 and bench_cover.shape[2] == 3 else (
+                        "Grayscale" if bench_cover.ndim == 2 else f"{bench_cover.shape[2]} kanal"
+                    )
+                    cover_details = {
+                        "Nama/Sumber Cover": bench_cover_name or "Tidak diketahui",
+                        "Dimensi Cover": f"{width} x {height} px",
+                        "Kanal Cover": channels,
+                        "Format Stego": b_fmt,
+                    }
+                    for row in rows_10:
+                        row.update(cover_details)
                     S["bench_10_result"] = rows_10
                     status_text.empty()
                     st.success("Pengujian 10 payload berhasil selesai! Seluruh payload pulih 100% identik.")
@@ -165,6 +183,13 @@ def render():
         if res_10:
             df_10 = pd.DataFrame(res_10)
             st.subheader("Hasil Evaluasi 10 Ukuran Payload")
+            first_result = res_10[0]
+            st.caption(
+                f"Cover yang diuji: **{first_result.get('Nama/Sumber Cover', 'Tidak diketahui')}** · "
+                f"{first_result.get('Dimensi Cover', 'dimensi tidak tersedia')} · "
+                f"{first_result.get('Kanal Cover', 'kanal tidak tersedia')} · "
+                f"Format stego: {first_result.get('Format Stego', 'tidak tersedia')}."
+            )
             show_metrics({
                 "Jumlah Uji": f"{len(df_10)} payload",
                 "Rentang PSNR (dB)": f"{df_10['PSNR (dB)'].min():.1f} - {df_10['PSNR (dB)'].max():.1f} dB",

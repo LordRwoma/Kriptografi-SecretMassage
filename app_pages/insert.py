@@ -69,12 +69,15 @@ def render():
         source_choices.append("Hasil ekstraksi sebelumnya")
     source = st.radio("Citra sampul", source_choices, horizontal=True)
     cover = None
+    cover_name = None
     svg_max_edge = 1024
     if source == "Contoh bawaan":
         sample = st.selectbox("Pilih gambar", list(SAMPLES))
         cover = SAMPLES[sample]()
+        cover_name = sample
     elif source == "Hasil ekstraksi sebelumnya":
         cover = S["cover_from_extract"]
+        cover_name = "Hasil ekstraksi sebelumnya"
         st.info(f"Menggunakan citra hasil ekstraksi ({cover.shape[1]}×{cover.shape[0]} piksel) sebagai sampul baru.")
     else:
         cover_upload = st.file_uploader(
@@ -97,6 +100,8 @@ def render():
                 help="SVG dirender menjadi piksel sebelum payload disisipkan. Hasil stego tetap PNG/JPEG.",
             )
         cover = read_upload(cover_upload, svg_max_edge=svg_max_edge)
+        if cover is not None:
+            cover_name = cover_upload.name
 
     cap = transport.capacity_bytes(cover.shape, output_format, ecc) if cover is not None else 0
     st.metric(
@@ -172,6 +177,7 @@ def render():
                 encoded=encoded,
                 payload=payload,
                 name=payload_name,
+                cover_name=cover_name,
                 filename=safe_filename(output_stem, extension),
                 format=info["output_format"],
                 elapsed=elapsed,

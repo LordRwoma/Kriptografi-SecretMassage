@@ -158,3 +158,28 @@ class TestAppWorkflows(unittest.TestCase):
         self.assertEqual(at.title[0].value, "Beranda StegoCrypt-X")
         self.assertTrue(any("Cara menggunakan" in block.value for block in at.header))
         self.assertTrue(any("Belum ada hasil" in metric.value for metric in at.metric))
+
+    def test_payload_benchmark_records_uploaded_cover_metadata(self):
+        from streamlit.testing.v1 import AppTest
+        import numpy as np
+        from image_io import encode_image
+
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=60).run()
+        at.switch_page("app_pages/evaluation.py").run()
+        next(w for w in at.radio if w.label == "Sumber cover untuk pengujian 10 payload").set_value(
+            "Unggah cover baru"
+        ).run()
+        cover = encode_image(np.zeros((32, 32, 3), dtype=np.uint8))
+        at.file_uploader(key="b_upload").set_value(
+            ("cover-uji.png", cover, "image/png")
+        ).run()
+        next(w for w in at.button if w.label == "Jalankan Pengujian 10 Payload").click().run()
+
+        self.assertEqual([error.message for error in at.exception], [])
+        rows = at.session_state["bench_10_result"]
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(rows[0]["Nama/Sumber Cover"], "cover-uji.png")
+        self.assertEqual(rows[0]["Dimensi Cover"], "32 x 32 px")
+        self.assertEqual(rows[0]["Kanal Cover"], "RGB")
+        self.assertEqual(rows[0]["Format Stego"], "PNG")
