@@ -2,7 +2,8 @@
 
 ## Pembaruan dukungan format dan evaluasi interaktif
 
-- **Uji serangan** kini memiliki kelompok/tingkat gangguan: filtering, resizing
+- **Uji serangan** kini memakai paket standar 16 pengujian tanpa pilihan tingkat
+  gangguan. Kelompok tambahan meliputi filtering, resizing
   beberapa interpolasi, cropping dimensi, rotasi, pergeseran, dan serangan
   gabungan. Metrik yang tidak sesuai setelah perubahan dimensi dikosongkan;
   percobaan ekstraksi tetap dicatat. Pilih pratinjau dan unduh CSV hasil uji.

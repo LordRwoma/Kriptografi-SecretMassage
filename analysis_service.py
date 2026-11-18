@@ -189,7 +189,7 @@ def run_attack(stego, name, password, expected=None, info=None):
 def attack_csv(rows):
     """Keep exports free of binary payloads, keys and passwords."""
     import pandas as pd
-    return pd.DataFrame(rows).to_csv(index=False).encode("utf-8-sig")
+    return pd.DataFrame(rows).drop(columns=["tingkat"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
 
 
 def evaluate(cover, stego, password, expected=None, info=None):

@@ -29,13 +29,11 @@ def render():
         horizontal=True,
         key="attack_scope",
     )
-    category = st.selectbox("Kelompok serangan", ["Semua kelompok"] + sorted(
+    category = st.selectbox("Kelompok serangan", ["Standar (16 pengujian)"] + sorted(
         {details["kategori"] for details in A.DETAILS.values() if details["kategori"] != "Kontrol"}))
-    levels = st.multiselect("Tingkat gangguan", ["Ringan", "Sedang", "Berat"],
-                            default=["Ringan", "Sedang", "Berat"])
-    names = [name for name, _ in A.ATTACK_SUITE if name == "Tanpa serangan" or
-             (A.DETAILS[name]["tingkat"] in levels and
-              (category == "Semua kelompok" or A.DETAILS[name]["kategori"] == category))]
+    names = ([name for name, _ in A.SUITE] if category == "Standar (16 pengujian)" else
+             [name for name, _ in A.ATTACK_SUITE if name == "Tanpa serangan" or
+              A.DETAILS[name]["kategori"] == category])
     attack_name = st.selectbox(
         "Serangan",
         names,
@@ -43,7 +41,7 @@ def render():
         help="Pilih satu serangan; daftar dinonaktifkan saat seluruh suite dijalankan.",
     )
     st.caption(f"{len(names)} pengujian termasuk kontrol tanpa serangan. "
-               "Tingkat ringan/sedang/berat adalah pengaturan gangguan, bukan jaminan payload pulih.")
+               "Default memakai paket standar. Variasi tambahan tersedia pada kelompok masing-masing.")
     if selected == "Serangan terpilih":
         st.caption(A.DETAILS[attack_name]["parameter"])
     token = (image_key(target["stego"]), hashlib.sha256(password.encode()).hexdigest())
@@ -81,7 +79,7 @@ def render():
     record = S.get("attack_result")
     if not record or record["token"] != token:
         return
-    frame = pd.DataFrame(record["rows"])
+    frame = pd.DataFrame(record["rows"]).drop(columns=["tingkat"], errors="ignore")
     show_metrics({
         "Jumlah uji": len(frame),
         "Autentikasi valid": int(frame.autentikasi_valid.sum()),

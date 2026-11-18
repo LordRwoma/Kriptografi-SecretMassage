@@ -8,15 +8,16 @@ tetap dicatat sebagai hasil eksperimen, bukan dibuat seolah-olah berhasil.
 
 1. Buat hasil di **Sisipkan**, kemudian buka **Uji serangan**. Unggahan stego
    juga dapat dipakai, tetapi tidak memiliki bit referensi body dari sesi.
-2. Masukkan password yang benar, pilih kelompok dan tingkat gangguan.
-3. Pilih satu serangan atau seluruh serangan dalam kelompok/tingkat pilihan.
+2. Masukkan password yang benar. Default memakai paket standar 16 pengujian.
+3. Pilih satu serangan atau seluruh serangan pada kelompok pilihan. Variasi
+   tambahan tersedia lewat kelompok filtering, resizing, cropping, dan lainnya.
 4. Tekan **Jalankan uji serangan**. Kontrol tanpa serangan diperiksa dahulu;
    jika kontrol gagal, pengujian dibatalkan.
 5. Lihat tabel dan grafik, pilih pratinjau hasil, unduh gambar atau CSV.
 
-Tingkat ringan/sedang/berat menyatakan besar gangguan dalam keluarga serangan.
-Tingkat tersebut tidak mengasumsikan metode LSB dapat menahannya dan bukan
-skala universal yang menyamakan JPEG, noise, dan cropping.
+Pilihan tingkat gangguan dihapus dari antarmuka dan ekspor CSV. Parameter
+serangan tetap ditampilkan secara eksplisit. Seluruh 67 skenario tidak lagi
+dijalankan sekaligus melalui pilihan default.
 
 Serangan meliputi JPEG kualitas 95–10, Gaussian noise sigma 1–10,
 salt-and-pepper 0,05–5% per nilai kanal, median/Gaussian/average filtering,

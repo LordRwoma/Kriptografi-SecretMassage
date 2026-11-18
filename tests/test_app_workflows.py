@@ -44,13 +44,16 @@ class TestAppWorkflows(unittest.TestCase):
 
         at.switch_page("app_pages/attacks.py").run()
         at.text_input(key="attack_password").set_value("uji-gui-2026").run()
+        self.assertFalse(any(w.label == "Tingkat gangguan" for w in at.multiselect))
+        self.assertEqual(next(w for w in at.selectbox if w.label == "Kelompok serangan").value,
+                         "Standar (16 pengujian)")
         next(w for w in at.radio if w.label == "Cakupan pengujian").set_value("Seluruh serangan").run()
         self.assertTrue(next(w for w in at.selectbox if w.label == "Serangan").disabled)
         button("Jalankan uji serangan").click().run()
         no_error()
         rows = at.session_state["attack_result"]["rows"]
         import attacks as A
-        self.assertEqual(len(rows), len(A.ATTACK_SUITE))
+        self.assertEqual(len(rows), len(A.SUITE))
         self.assertTrue(rows[0]["payload_identik"])
         at.run()
         self.assertEqual(at.session_state["attack_result"]["rows"], rows)
