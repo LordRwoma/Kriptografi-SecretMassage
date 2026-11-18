@@ -1,6 +1,7 @@
 import hashlib
 import os
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -179,22 +180,97 @@ def render():
                 help="Unduh tabel hasil pengujian 10 payload untuk dilampirkan pada laporan tugas akhir.",
             )
 
-            st.subheader("Grafik Metrik Kualitas per Ukuran Payload")
+            st.subheader("Grafik Metrik terhadap Kapasitas Payload")
+            st.caption(
+                "Sumbu X menunjukkan kapasitas teoritis yang terpakai. Arah yang diharapkan: "
+                "PSNR dan SSIM tetap tinggi, MSE tetap rendah. Arahkan kursor ke titik untuk "
+                "melihat ukuran payload dan nilai tepatnya."
+            )
+            chart_data = pd.DataFrame({
+                "capacity_pct": df_10["Payload (B)"] / b_cap * 100,
+                "payload_bytes": df_10["Payload (B)"],
+                "psnr": df_10["PSNR (dB)"],
+                "ssim": df_10["SSIM"],
+                "mse": df_10["MSE"],
+                "embed_ms": df_10["Waktu Embed (ms)"],
+                "extract_ms": df_10["Waktu Extract (ms)"],
+            })
+            x_encoding = alt.X(
+                "capacity_pct:Q",
+                title="Kapasitas payload terpakai (%)",
+                scale=alt.Scale(domain=[0, 100]),
+                axis=alt.Axis(values=[0, 25, 50, 75, 100]),
+            )
+
+            def quality_chart(field, title, scale, value_format):
+                return (
+                    alt.Chart(chart_data)
+                    .mark_line(point=alt.OverlayMarkDef(filled=True, size=65))
+                    .encode(
+                        x=x_encoding,
+                        y=alt.Y(field, title=title, scale=scale),
+                        tooltip=[
+                            alt.Tooltip("payload_bytes:Q", title="Payload (byte)", format=",.0f"),
+                            alt.Tooltip("capacity_pct:Q", title="Kapasitas terpakai (%)", format=".2f"),
+                            alt.Tooltip(field, title=title, format=value_format),
+                        ],
+                    )
+                    .properties(height=260)
+                )
+
             chart_col1, chart_col2 = st.columns(2)
             with chart_col1:
-                st.caption("PSNR (dB) terhadap Ukuran Payload (Byte)")
-                st.line_chart(df_10.set_index("Payload (B)")[["PSNR (dB)"]])
+                st.altair_chart(
+                    quality_chart("psnr:Q", "PSNR (dB)", alt.Scale(zero=False), ".2f"),
+                    width="stretch",
+                    alt="PSNR terhadap kapasitas payload terpakai; nilai lebih tinggi menunjukkan distorsi lebih rendah",
+                )
             with chart_col2:
-                st.caption("SSIM terhadap Ukuran Payload (Byte)")
-                st.line_chart(df_10.set_index("Payload (B)")[["SSIM"]])
+                st.altair_chart(
+                    quality_chart("ssim:Q", "SSIM (0–1)", alt.Scale(domain=[0, 1]), ".5f"),
+                    width="stretch",
+                    alt="SSIM terhadap kapasitas payload terpakai; nilai mendekati satu menunjukkan kemiripan lebih tinggi",
+                )
 
             chart_col3, chart_col4 = st.columns(2)
             with chart_col3:
-                st.caption("Persentase Piksel Berubah (%) terhadap Ukuran Payload (Byte)")
-                st.bar_chart(df_10.set_index("Payload (B)")[["Piksel Berubah (%)"]])
+                st.altair_chart(
+                    quality_chart("mse:Q", "MSE", alt.Scale(zero=True), ".6f"),
+                    width="stretch",
+                    alt="MSE terhadap kapasitas payload terpakai; nilai lebih rendah menunjukkan distorsi lebih kecil",
+                )
             with chart_col4:
-                st.caption("Waktu Embed & Extract (ms) terhadap Ukuran Payload (Byte)")
-                st.line_chart(df_10.set_index("Payload (B)")[["Waktu Embed (ms)", "Waktu Extract (ms)"]])
+                time_data = chart_data.melt(
+                    id_vars=["capacity_pct", "payload_bytes"],
+                    value_vars=["embed_ms", "extract_ms"],
+                    var_name="operation",
+                    value_name="time_ms",
+                )
+                time_data["operation"] = time_data["operation"].map({
+                    "embed_ms": "Embed",
+                    "extract_ms": "Ekstrak",
+                })
+                time_chart = (
+                    alt.Chart(time_data)
+                    .mark_line(point=alt.OverlayMarkDef(filled=True, size=65))
+                    .encode(
+                        x=x_encoding,
+                        y=alt.Y("time_ms:Q", title="Waktu proses (ms)", scale=alt.Scale(zero=True)),
+                        color=alt.Color("operation:N", title="Proses"),
+                        tooltip=[
+                            alt.Tooltip("payload_bytes:Q", title="Payload (byte)", format=",.0f"),
+                            alt.Tooltip("capacity_pct:Q", title="Kapasitas terpakai (%)", format=".2f"),
+                            alt.Tooltip("operation:N", title="Proses"),
+                            alt.Tooltip("time_ms:Q", title="Waktu (ms)", format=".1f"),
+                        ],
+                    )
+                    .properties(height=260)
+                )
+                st.altair_chart(
+                    time_chart,
+                    width="stretch",
+                    alt="Waktu embed dan ekstrak terhadap kapasitas payload terpakai",
+                )
 
     st.divider()
     st.subheader("Arsip eksperimen historis")
