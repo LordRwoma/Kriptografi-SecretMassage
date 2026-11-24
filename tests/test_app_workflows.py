@@ -213,3 +213,12 @@ class TestAppWorkflows(unittest.TestCase):
         at.run()
         self.assertEqual([error.message for error in at.exception], [])
         self.assertEqual(len(at.session_state["benchmark_result"]["rows"]), 10)
+
+    def test_benchmark_page_is_available_from_app_navigation(self):
+        from streamlit.testing.v1 import AppTest
+
+        app = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+        at = AppTest.from_file(app, default_timeout=40).run()
+        at.switch_page("app_pages/benchmark.py").run()
+        self.assertEqual([error.message for error in at.exception], [])
+        self.assertEqual(at.title[0].value, "Complexity & Efisiensi")
